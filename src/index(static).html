@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/jpeg" href="./src/assets/taymer_small_logo.jpeg"/>
+  <title>LR100 Configuration Tool</title>
+  <link rel="stylesheet" href="./src/styles/styles.css">
+</head>
+<body>
+
+  <div id="top-bar">
+    <img id="header-logo" src="./src/assets/taymer_logo.png" alt="My Logo">
+
+    <label for="coilerSelect">Coiler:</label>
+    <select id="coilerSelect">
+      <option value="">-- Select Coiler --</option>
+      <option value="LR100-10.gltf">Collapsible 16″ I.D. Coiler</option>
+      <option value="LR100-99.gltf">Collapsible 12″ I.D. Coiler</option>
+      <option value="LR100-200.gltf">Collapsible 8″ I.D. Coiler</option>
+    </select>
+
+    <label for="cutterSelect">Cutter:</label>
+    <select id="cutterSelect" disabled>
+      <option value="">-- Select Counter --</option>
+      <option value="LR100-C.gltf">Cutting Blade</option>
+      <option value="">None</option>
+    </select>
+
+    <label for="reelStandSelect">Reel Stand:</label>
+    <select id="reelStandSelect">
+      <option value="">-- Select Reel Stand --</option>
+      <option value="LR100-284.gltf">Wind-off Reel Stand</option>
+      <option value="LR100-418.gltf">Spool Winder - 18" High</option>
+      <option value="">None</option>
+    </select>
+
+    <label for="counterSelect">Counter:</label>
+    <select id="counterSelect">
+      <option value="">-- Select Counter --</option>
+      <option value="LR100-1410.gltf">Footage Counter (1410)</option>
+      <option value="LR100-1420.gltf">Metric Counter (1420)</option>
+      <option value="LR100-1410UR.gltf">Footage Counter with UR Wheels</option>
+      <option value="LR100-1420UR.gltf">Metric Counter with UR Wheels</option>
+    </select>
+
+    <button class="add-to-cart" id="addBtn">Add to cart</button>
+
+    <div id="price-display"></div>
+  </div>
+  <div id="canvas-container">
+    <div id="canvas-overlay">
+      <p>Click and Drag to Rotate</p>
+    </div>
+    <button class="play-animation" id="playBtn">▶</button>
+    <button class="pause-animation" id="pauseBtn">pls work</button>
+    <canvas id="lr100-canvas"></canvas>
+    
+  </div>
+  <script type="module" src="./src/scripts/js/main.js"></script>
+</body>
+</html>

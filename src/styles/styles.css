@@ -1,0 +1,117 @@
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'roboto', sans-serif;
+      font-size: 20px;
+    }
+    .add-to-cart {
+      color: white;
+      background-color: #f28c28;
+      padding: 15px 20px;
+      border: None;
+      font-size: 16px;
+      font-family: 'roboto', sans-serif;
+      cursor: pointer;
+     
+    }
+    .add-to-cart:hover {
+      background-color: #e67e22;
+    }
+    #top-bar {
+      font-weight: bolder;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      background: #f9f9f9;
+      border-bottom: 1px solid #ccc;
+      padding: 0.5rem 1rem;
+    }
+    #header-logo {
+      height: 50px;
+      margin-right: 1rem;
+    }
+    label {
+      margin-right: 0.5rem;
+    }
+    select {
+      margin-right: 1.5rem;
+      font-family: 'lato', sans-serif;
+      font-size: 16px;
+      padding: 4px;
+      min-width: 140px;
+    }
+    #price-display {
+      margin-left: auto;
+      font-family: 'roboto', sans-serif;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    #canvas-container {
+      width: 100%;
+      height: calc(100vh - 70px);
+      background: #fff;
+      position: relative;
+    }
+    #lr100-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #canvas-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(128, 128, 128, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none; 
+    }
+    #canvas-overlay p {
+      color: white;
+      font-size: 2rem;
+      font-family: 'roboto', sans-serif;
+      text-align: center;
+      margin: 0;
+      z-index: 20;
+    }
+    
+    .play-animation {
+      visibility: hidden;
+      position: absolute;
+      top: 1%;
+      left: 1%;
+      background: #f36100;
+      color: white;
+      font-size: 1.2rem;
+      padding: 0.2rem 1rem;
+      border: none;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .play-animation:hover {
+      background-color: #e67e22;
+    }
+    .pause-animation {
+      visibility: hidden;
+      position: absolute;
+      top: 1%;
+      left: 4.5%;
+      background: #f36100;
+      color: white;
+      font-size: 1.2rem;
+      font-weight: bolder;
+      padding: 0.3rem 1.2rem;
+      border: none;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .pause-animation:hover {
+      background-color: #e67e22;
+    }
+    

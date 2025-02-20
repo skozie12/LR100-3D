@@ -1,0 +1,19 @@
+{
+  "name": "lr100-3d",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "wp-scripts start --webpack-src-dir=recources --output-path=public",
+    "build": "wp-scripts build --webpack-src-dir=resources --output-path=public",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dat.gui": "^0.7.9",
+    "three": "^0.173.0",
+    "vite": "^6.1.0"
+  }
+}
