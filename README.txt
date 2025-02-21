@@ -17,6 +17,6 @@ Wordpress Plugin Bullshit || post-dev
 
 To Access and view the 3D Environment
 - To launch node and npm: set PATH=C:\Users\{USER}\Documents\node-v22.13.1-win-x64;%PATH% // MUST BE IN CMD, NOT POWERSHELL
-- 'npx vite' to launch web-dev server
+- 'npx vite' to launch web-dev server, must run command in \LR100-3D
 - 'o' to launch the server
 - DONE
