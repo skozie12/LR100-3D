@@ -1,3 +1,5 @@
+// THIS FILE IS THE MOVING EDITION, WHERE THE COILER IS ANIMATED TO SPIN
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
