@@ -26,7 +26,7 @@ camera.updateProjectionMatrix();
 
 function createLogoFloor(scene) {
   const textureLoader = new THREE.TextureLoader();
-  const logoTexture = textureLoader.load('./src/assets/taymer_logo.png');
+  const logoTexture = textureLoader.load('./src/assets(moving)/taymer_logo.png');
 
   const topMaterial = new THREE.MeshPhongMaterial({
     map: logoTexture,
@@ -159,7 +159,7 @@ function removeCurrentCombo() {
 function loadCombo(fileName, onLoad) {
   if (!fileName) return;
   loader.load(
-    `./src/assets/${fileName}`,
+    `./src/assets(moving)/${fileName}`,
     (gltf) => {
       const newModel = gltf.scene;
       newModel.rotation.y = Math.PI;
