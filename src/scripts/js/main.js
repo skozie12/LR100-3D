@@ -182,6 +182,12 @@ function onDropdownChange() {
       });
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
+
+        dummy = new THREE.Object3D();
+        dummy.position.set(0.18, 0.06, 0.03);
+        movingModel.add(dummy);
+
+
       });
     }
     else if (coilerValue === '100-99.gltf') {
@@ -291,11 +297,85 @@ function updatePrice() {
   }
 }
 
+import { World, Body, Sphere, Vec3, DistanceConstraint, BODY_TYPES } from 'cannon-es';
+
+const world = new World({
+  gravity: new Vec3(0, -9.82, 0),
+});
+
+const segmentCount = 20;
+const segmentWidth = 0.025;
+const segmentMass = 0.1;
+const segmentDistance = 0.05;
+const ropeBodies = [];
+
+for (let i = 0; i < segmentCount; i++) {
+  const sphereShape = new Sphere(segmentWidth / 2);
+  const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0)});
+  segmentBody.angularDamping = 0.5;
+  segmentBody.linearDamping = 0.1;
+  world.addBody(segmentBody);
+  ropeBodies.push(segmentBody);
+}
+
+for (let i = 0; i < segmentCount -1; i++) {
+  const bodyA = ropeBodies[i];
+  const bodyB = ropeBodies[i + 1];  
+  const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance);
+  world.addConstraint(constraint);
+}
+const endOfRope = ropeBodies[segmentCount - 1];
+
+const anchorEnd = new Body({ mass: 0 });
+anchorEnd.position.set(0.75, 0.07, 0.03);
+anchorEnd.type = BODY_TYPES.KINEMATIC;
+world.addBody(anchorEnd);
+
+const anchor = new Body({ mass: 0 });
+anchor.position.set(0, 0.075, 0.03);
+world.addBody(anchor);
+
+const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[0], 0);
+world.addConstraint(anchorConstraint);
+
+const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
+world.addConstraint(anchorEndConstraint);
+
+const ropeMeshes = [];
+const ropeGeom = new THREE.SphereGeometry(segmentWidth / 2, 16, 16);
+const ropeMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+
+for (let i = 0; i < segmentCount; i++) {
+  const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
+  scene.add(mesh);
+  ropeMeshes.push(mesh);
+}
+
+let dummy = null;
+const temp = new THREE.Vector3();
+
 function animate() {
   requestAnimationFrame(animate);
+
+  world.step(1/200);
+  for (let i = 0; i < segmentCount; i++) {
+    ropeMeshes[i].position.copy(ropeBodies[i].position);
+    ropeMeshes[i].quaternion.copy(ropeBodies[i].quaternion);
+  }
+
   if (isPlaying && movingModel) {
     movingModel.rotation.z += 0.016;
   }
+
+  if (dummy){
+    dummy.getWorldPosition(temp);
+    anchorEnd.position.x = temp.x;
+    anchorEnd.position.y = temp.y;
+    anchorEnd.position.z = temp.z;
+    anchorEnd.velocity.set(0, 0, 0);
+    anchorEnd.angularVelocity.set(0, 0, 0);
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }

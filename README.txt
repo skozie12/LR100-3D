@@ -2,7 +2,7 @@
 
 3D environment is designed to be native to 16:9, and may be unstable or unusable at different aspect ratios.
 
-Developed using npx vite to view browser environment, and has yet to be integrated into a Wordpress plugin where it will eventually be made live.
+Developed using npx vite to view browser environment, and has yet to be integrated into a Wordpress plugin (or standalone page) where it will eventually be made live.
 
 Built in .js, using node.js, npm, three.js, and cannon.js
 
