@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES } from 'cannon-es';
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -172,10 +173,10 @@ function onDropdownChange() {
   }
 
   if (coilerValue !== oldCoilerValue) {
-
+    
     disposeModel(standModel);  standModel  = null;
     disposeModel(movingModel); movingModel = null;
-
+    createCoiler();
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
@@ -186,7 +187,7 @@ function onDropdownChange() {
         dummy = new THREE.Object3D();
         dummy.position.set(0.18, 0.06, 0.03);
         movingModel.add(dummy);
-
+        createCoiler();
 
       });
     }
@@ -239,6 +240,7 @@ function onDropdownChange() {
   }
 
   updatePrice();
+  createCoiler();
 }
 
 const reelSelect    = document.getElementById('reelStandSelect');
@@ -297,23 +299,28 @@ function updatePrice() {
   }
 }
 
-import { World, Body, Sphere, Vec3, DistanceConstraint, BODY_TYPES } from 'cannon-es';
-
 const world = new World({
   gravity: new Vec3(0, -9.82, 0),
 });
 
-const segmentCount = 20;
+const defaultMaterial = new Material('defaultMaterial');
+world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
+  friction: 0.4,
+  restitution: 0.0,
+});
+world.defaultMaterial = defaultMaterial;
+
+const segmentCount = 50;
 const segmentWidth = 0.025;
 const segmentMass = 0.1;
-const segmentDistance = 0.05;
+const segmentDistance = 0.005;
 const ropeBodies = [];
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
-  const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0)});
-  segmentBody.angularDamping = 0.5;
-  segmentBody.linearDamping = 0.1;
+  const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0), material: defaultMaterial });
+  segmentBody.angularDamping = 0.8;
+  segmentBody.linearDamping = 0.2;
   world.addBody(segmentBody);
   ropeBodies.push(segmentBody);
 }
@@ -324,19 +331,28 @@ for (let i = 0; i < segmentCount -1; i++) {
   const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance);
   world.addConstraint(constraint);
 }
+
 const endOfRope = ropeBodies[segmentCount - 1];
+const midRope = segmentCount / 2;
 
 const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.75, 0.07, 0.03);
+anchorEnd.position.set(0.75, 0.07, 0.);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
+
+const anchorStart = new Body({ mass: 0 });
+anchorStart.position.set(-0.6, 0.07, 0.03);
+world.addBody(anchorStart);
 
 const anchor = new Body({ mass: 0 });
 anchor.position.set(0, 0.075, 0.03);
 world.addBody(anchor);
 
-const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[0], 0);
+const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
 world.addConstraint(anchorConstraint);
+
+const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
+world.addConstraint(anchorStartConstraint);
 
 const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
 world.addConstraint(anchorEndConstraint);
@@ -353,6 +369,41 @@ for (let i = 0; i < segmentCount; i++) {
 
 let dummy = null;
 const temp = new THREE.Vector3();
+
+let coilerBody = null;
+let coilerBodyMesh = null;
+let coilerRadius = 0.187;
+let coilerHeight = 0.13;
+
+function createCoiler() {
+  if (coilerBody) {
+    world.removeBody(coilerBody);
+    coilerBody = null;
+  }
+  if (coilerBodyMesh) {
+    scene.remove(coilerBodyMesh);
+    coilerBodyMesh.geometry.dispose();
+    coilerBodyMesh.material.dispose();
+    coilerBodyMesh = null;
+  }
+  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  coilerBody = new Body({ mass: 0, type: BODY_TYPES.KINEMATIC, shape: cylinderShape, material: defaultMaterial, color: 0x00ff00 });
+  coilerBody.position.set(0.57, 0.0, 0.025);
+  world.addBody(coilerBody);
+
+  const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x00ff00,
+    transparent: true,
+    opacity: 0.5,
+    wireframe: true,
+  })
+  coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
+  coilerBodyMesh.position.set(0.57, 0.0, 0.025);
+  scene.add(coilerBodyMesh);
+  cylinderGeo.rotateZ(Math.PI / 2);
+  cylinderGeo.rotateY(Math.PI / 2);
+};
 
 function animate() {
   requestAnimationFrame(animate);
@@ -379,4 +430,5 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
+createCoiler();
 animate();
