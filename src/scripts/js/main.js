@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES } from 'cannon-es';
+import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -183,12 +183,11 @@ function onDropdownChange() {
       });
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
-
         dummy = new THREE.Object3D();
-        dummy.position.set(0.18, 0.06, 0.03);
+        dummy.position.set(0.25, 0.06, -0.03);
         movingModel.add(dummy);
         createCoiler();
-
+        createCoilerSide()
       });
     }
     else if (coilerValue === '100-99.gltf') {
@@ -305,14 +304,14 @@ const world = new World({
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: 0.4,
-  restitution: 0.0,
+  friction: 1,
+  restitution: 0,
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 50;
+const segmentCount = 100;
 const segmentWidth = 0.025;
-const segmentMass = 0.1;
+const segmentMass = 0.01;
 const segmentDistance = 0.005;
 const ropeBodies = [];
 
@@ -333,10 +332,10 @@ for (let i = 0; i < segmentCount -1; i++) {
 }
 
 const endOfRope = ropeBodies[segmentCount - 1];
-const midRope = segmentCount / 2;
+const midRope = 10;
 
 const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.75, 0.07, 0.);
+anchorEnd.position.set(0.57, 0.0, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
 
@@ -373,7 +372,7 @@ const temp = new THREE.Vector3();
 let coilerBody = null;
 let coilerBodyMesh = null;
 let coilerRadius = 0.187;
-let coilerHeight = 0.13;
+let coilerHeight = 0.18;
 
 function createCoiler() {
   if (coilerBody) {
@@ -387,23 +386,120 @@ function createCoiler() {
     coilerBodyMesh = null;
   }
   const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
-  coilerBody = new Body({ mass: 0, type: BODY_TYPES.KINEMATIC, shape: cylinderShape, material: defaultMaterial, color: 0x00ff00 });
+  coilerBody = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    shape: cylinderShape, 
+    material: defaultMaterial 
+  });
   coilerBody.position.set(0.57, 0.0, 0.025);
+  coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
 
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
+  cylinderGeo.rotateZ(Math.PI / 2); 
+  cylinderGeo.rotateY(Math.PI / 2); 
+
   const wireMat = new THREE.MeshBasicMaterial({
     color: 0x00ff00,
     transparent: true,
     opacity: 0.5,
     wireframe: true,
-  })
+  });
+
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
-  cylinderGeo.rotateZ(Math.PI / 2);
-  cylinderGeo.rotateY(Math.PI / 2);
-};
+}
+
+let coilerBodySide1 = null;
+let coilerBodyMeshSide1 = null;
+let coilerBodySide2 = null;
+let coilerBodyMeshSide2 = null;
+
+function createCoilerSides() {
+  
+  if (coilerBodySide1) {
+    world.removeBody(coilerBodySide1);
+    coilerBodySide1 = null;
+  }
+  if (coilerBodySide2) {
+    world.removeBody(coilerBodySide2);
+    coilerBodySide2 = null;
+  }
+
+  if (coilerBodyMeshSide1) {
+    scene.remove(coilerBodyMeshSide1);
+    coilerBodyMeshSide1.geometry.dispose();
+    coilerBodyMeshSide1.material.dispose();
+    coilerBodyMeshSide1 = null;
+  }
+  if (coilerBodyMeshSide2) {
+    scene.remove(coilerBodyMeshSide2);
+    coilerBodyMeshSide2.geometry.dispose();
+    coilerBodyMeshSide2.material.dispose();
+    coilerBodyMeshSide2 = null;
+  }
+
+  const cylinderShapeSide = new Cylinder(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16);
+ 
+  coilerBodySide1 = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    shape: cylinderShapeSide, 
+    material: defaultMaterial 
+  });
+  coilerBodySide1.position.set(0.57, 0.0, 0.13); 
+  coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
+  world.addBody(coilerBodySide1);
+
+  coilerBodySide2 = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    shape: cylinderShapeSide, 
+    material: defaultMaterial 
+  });
+  coilerBodySide2.position.set(0.57, 0.0, -0.07); 
+  coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
+  world.addBody(coilerBodySide2);
+
+  const cylinderGeoSide = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
+  cylinderGeoSide.rotateX(Math.PI / 2); 
+
+  const wireMatSide = new THREE.MeshBasicMaterial({
+    color: 0x0000FF,
+    transparent: true,
+    opacity: 0.5,
+    wireframe: true,
+  });
+
+  coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide, wireMatSide);
+  coilerBodyMeshSide1.position.set(0.57, 0.0, 0.13);
+  scene.add(coilerBodyMeshSide1);
+
+
+  coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
+  coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
+  scene.add(coilerBodyMeshSide2);
+}
+
+createCoilerSides();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function animate() {
   requestAnimationFrame(animate);
@@ -416,8 +512,9 @@ function animate() {
 
   if (isPlaying && movingModel) {
     movingModel.rotation.z += 0.016;
+    
   }
-
+  
   if (dummy){
     dummy.getWorldPosition(temp);
     anchorEnd.position.x = temp.x;
@@ -430,5 +527,5 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
-createCoiler();
+
 animate();
