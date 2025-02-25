@@ -177,6 +177,7 @@ function onDropdownChange() {
     disposeModel(standModel);  standModel  = null;
     disposeModel(movingModel); movingModel = null;
     createCoiler();
+    createCoilerSides();
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
@@ -187,7 +188,7 @@ function onDropdownChange() {
         dummy.position.set(0.25, 0.06, -0.03);
         movingModel.add(dummy);
         createCoiler();
-        createCoilerSide()
+        createCoilerSides();
       });
     }
     else if (coilerValue === '100-99.gltf') {
@@ -239,7 +240,6 @@ function onDropdownChange() {
   }
 
   updatePrice();
-  createCoiler();
 }
 
 const reelSelect    = document.getElementById('reelStandSelect');
@@ -481,25 +481,7 @@ function createCoilerSides() {
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
   scene.add(coilerBodyMeshSide2);
-}
-
-createCoilerSides();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+};
 
 function animate() {
   requestAnimationFrame(animate);
