@@ -87,16 +87,25 @@ renderer.domElement.addEventListener('pointerdown', onCanvasClick);
 
 let isPlaying = false;
 let isPaused = false;
+let segmentTimer = null;
 
-function onPlayClick(){
-  isPaused = false;
-  isPlaying = true;
+function onPlayClick() {
+  if (!isPlaying) { 
+    isPlaying = true;
+    
+    segmentTimer = setInterval(() => {
+      if (isPlaying) {
+        addRopeSegment();
+      }
+    }, 100);
+  }
 }
 playBtn.addEventListener('pointerdown', onPlayClick);
 
 function onPauseClick(){
   isPlaying = false;
   isPaused = true;
+  clearInterval(segmentTimer);
 }
 pauseBtn.addEventListener('pointerdown', onPauseClick);
 
@@ -207,15 +216,12 @@ function onDropdownChange() {
         movingModel = model;
       });
     }
-
     else if (coilerValue) {
-
       loadCombo(coilerValue, (model) => {
         standModel = model; 
       });
     }
   }
-
   if (cutterValue !== oldCutterValue) {
     disposeModel(cutterModel);
     cutterModel = null;
@@ -230,7 +236,6 @@ function onDropdownChange() {
   oldCounterValue = counterValue;
   oldCoilerValue  = coilerValue;
   oldCutterValue  = cutterValue;
-
   if (coilerValue) {
     playBtn.style.visibility  = 'visible';
     pauseBtn.style.visibility = 'visible';
@@ -238,7 +243,6 @@ function onDropdownChange() {
     playBtn.style.visibility  = 'hidden';
     pauseBtn.style.visibility = 'hidden';
   }
-
   updatePrice();
 }
 
@@ -299,29 +303,28 @@ function updatePrice() {
 }
 
 const world = new World({
-  gravity: new Vec3(0, -9.82, 0),
+  gravity: new Vec3(0, -5, 0),
 });
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: 0, // Play With 
-  restitution: 0,
+  friction: -10, // Play With 
+  restitution: 0.1,
+
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 200; // Play with
+const segmentCount = 30; // Play with
 const segmentWidth = 0.02;
-const segmentMass = 1;
-const segmentDistance = 0.00005;
+const segmentMass = 0.0001;
+const segmentDistance = 0.0001;
 const ropeBodies = [];
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
   const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0), material: defaultMaterial });
-  segmentBody.angularDamping = 0.9;
-  segmentBody.linearDamping = 0.9;
-  segmentBody.sleepSpeedLimit = 10;
-  segmentBody.sleepTimeLimit = 0.1;
+  segmentBody.angularDamping = 0.99;
+  segmentBody.linearDamping = 0.99;
 
   world.addBody(segmentBody);
   ropeBodies.push(segmentBody);
@@ -336,6 +339,45 @@ for (let i = 0; i < segmentCount -1; i++) {
 
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
+
+/* Purposed code to segment into seperate lengths, going to attempt to just insert at index 10
+
+const segmentCountStatic = 20;
+const segmentWidthStatic = 0.02;
+const segmentMassStatic = 1;
+const segmentDistanceStatic = 0.00005;
+const ropeBodiesStatic = [];
+
+for (let i = 0; i < segmentCountStatic; i++) {
+  const sphereShapeStatic = new Sphere(segmentWidthStatic / 2);
+  const segmentBodyStatic = new Body({ mass: segmentMassStatic, shape: sphereShapeStatic, position: new Vec3(0, 3 -i * segmentDistanceStatic, 0), material: defaultMaterial });
+  segmentBodyStatic.angularDamping = 0.9;
+  segmentBodyStatic.linearDamping = 0.9;
+  segmentBodyStatic.sleepSpeedLimit = 10;
+  segmentBodyStatic.sleepTimeLimit = 0.1;
+
+  world.addBody(segmentBodyStatic);
+  ropeBodiesStatic.push(segmentBodyStatic);
+}
+
+for (let i = 0; i < segmentCountStatic -1; i++) {
+  const segmentBodyStatic = ropeBodiesStatic[i];
+  const bodyBStatic = ropeBodiesStatic[i + 1];  
+  const constraintStatic = new DistanceConstraint(bodyBStatic, bodyBStatic, segmentDistanceStatic);
+  world.addConstraint(constraintStatic);
+}
+
+const ropeMeshesStatic = [];
+const ropeGeomStatic = new THREE.SphereGeometry(segmentWidthStatic / 2, 16, 16);
+const ropeMaterialStatic = new THREE.MeshPhongMaterial({ color: 0xFF2C2C });
+
+for (let i = 0; i < segmentCountStatic; i++) {
+  const mesh = new THREE.Mesh(ropeGeomStatic, ropeMaterialStatic);
+  scene.add(mesh);
+  ropeMeshesStatic.push(mesh);
+}
+
+*/
 
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.0, 0.025);
@@ -369,6 +411,40 @@ for (let i = 0; i < segmentCount; i++) {
   ropeMeshes.push(mesh);
 }
 
+function addRopeSegment(){
+  if (ropeBodies.length >= 10000) return;
+  
+  const prevBody = ropeBodies[10]; 
+  const nextBody = ropeBodies[11]; 
+  
+  world.constraints.forEach((constraint) => {
+    if ((constraint.bodyA === prevBody && constraint.bodyB === nextBody) ||
+        (constraint.bodyA === nextBody && constraint.bodyB === prevBody)) {
+      world.removeConstraint(constraint);
+    }
+  });
+
+  const newBody = new Body({ 
+    mass: segmentMass, 
+    shape: new Sphere(segmentWidth / 2), 
+    position: new Vec3(
+      (prevBody.position.x + nextBody.position.x) * 0.5,
+      (prevBody.position.y + nextBody.position.y) * 0.5,
+      (prevBody.position.z + nextBody.position.z) * 0.5
+    ),
+    material: defaultMaterial 
+  });
+  world.addBody(newBody);
+  ropeBodies.splice(11, 0, newBody); 
+  const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance);
+  const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance);
+  world.addConstraint(constraintPrev);
+  world.addConstraint(constraintNext);
+  const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
+  scene.add(mesh);
+  ropeMeshes.splice(11, 0, mesh);
+}
+
 let dummy = null;
 const temp = new THREE.Vector3();
 
@@ -391,7 +467,7 @@ function createCoiler() {
   const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
   coilerBody = new Body({ 
     mass: 0, 
-    type: BODY_TYPES.DYNAMIC, 
+    type: BODY_TYPES.KINEMATIC, 
     shape: cylinderShape, 
     material: defaultMaterial 
   });
@@ -489,14 +565,13 @@ function animate() {
   requestAnimationFrame(animate);
 
   world.step(1/200);
-  for (let i = 0; i < segmentCount; i++) {
+  for (let i = 0; i < ropeBodies.length; i++) {
     ropeMeshes[i].position.copy(ropeBodies[i].position);
     ropeMeshes[i].quaternion.copy(ropeBodies[i].quaternion);
   }
 
   if (isPlaying && movingModel) {
-    movingModel.rotation.z += 0.016;
-    
+    movingModel.rotation.z += 0.026;
   }
   
   if (dummy){
