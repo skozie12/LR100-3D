@@ -31,8 +31,8 @@ controls.enablePan = false;
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.position.set(0, 5, 10);
+const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+dirLight.position.set(0, 10, 10);
 scene.add(dirLight);
 
 window.addEventListener('resize', () => {
@@ -185,7 +185,7 @@ function onDropdownChange() {
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
         dummy = new THREE.Object3D();
-        dummy.position.set(0.25, 0.06, -0.03);
+        dummy.position.set(0.18, 0.06, -0.03);
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
@@ -304,22 +304,25 @@ const world = new World({
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: 1,
+  friction: 0, // Play With 
   restitution: 0,
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 100;
-const segmentWidth = 0.025;
-const segmentMass = 0.01;
-const segmentDistance = 0.005;
+const segmentCount = 200; // Play with
+const segmentWidth = 0.02;
+const segmentMass = 1;
+const segmentDistance = 0.00005;
 const ropeBodies = [];
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
   const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0), material: defaultMaterial });
-  segmentBody.angularDamping = 0.8;
-  segmentBody.linearDamping = 0.2;
+  segmentBody.angularDamping = 0.9;
+  segmentBody.linearDamping = 0.9;
+  segmentBody.sleepSpeedLimit = 10;
+  segmentBody.sleepTimeLimit = 0.1;
+
   world.addBody(segmentBody);
   ropeBodies.push(segmentBody);
 }
@@ -388,7 +391,7 @@ function createCoiler() {
   const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
   coilerBody = new Body({ 
     mass: 0, 
-    type: BODY_TYPES.KINEMATIC, 
+    type: BODY_TYPES.DYNAMIC, 
     shape: cylinderShape, 
     material: defaultMaterial 
   });
@@ -476,8 +479,7 @@ function createCoilerSides() {
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide, wireMatSide);
   coilerBodyMeshSide1.position.set(0.57, 0.0, 0.13);
   scene.add(coilerBodyMeshSide1);
-
-
+  
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
   scene.add(coilerBodyMeshSide2);
