@@ -31,7 +31,7 @@ controls.enablePan = false;
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(0, 10, 10);
 scene.add(dirLight);
 
@@ -92,12 +92,11 @@ let segmentTimer = null;
 function onPlayClick() {
   if (!isPlaying) { 
     isPlaying = true;
-    
     segmentTimer = setInterval(() => {
       if (isPlaying) {
         addRopeSegment();
       }
-    }, 100);
+    }, 95);
   }
 }
 playBtn.addEventListener('pointerdown', onPlayClick);
@@ -308,7 +307,7 @@ const world = new World({
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: -10, // Play With 
+  friction: -100, // Play With 
   restitution: 0.1,
 
 });
@@ -316,9 +315,47 @@ world.defaultMaterial = defaultMaterial;
 
 const segmentCount = 30; // Play with
 const segmentWidth = 0.02;
-const segmentMass = 0.0001;
-const segmentDistance = 0.0001;
+const segmentMass = 1;
+const segmentDistance = 0.01;
+
 const ropeBodies = [];
+const ropePoints = [];
+const ropeRadius = segmentWidth / 2;
+
+function updateRopeCurve() {
+  ropePoints.length = 0;
+  for (let i = 0; i < ropeBodies.length; i++) {
+    ropePoints.push(new THREE.Vector3(
+      ropeBodies[i].position.x,
+      ropeBodies[i].position.y,
+      ropeBodies[i].position.z
+    ));
+  }
+}
+
+function createRopeMesh(){
+  if (ropeMeshes.length > 0) {
+    ropeMeshes.forEach(mesh => {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    ropeMeshes.length = 0;
+  }
+
+  updateRopeCurve();
+  const curve = new THREE.CatmullRomCurve3(ropePoints); 
+  const tubeGeometry = new THREE.TubeGeometry(curve, segmentCount * 4, ropeRadius, 8, false);
+  const ropeMaterial = new THREE.MeshPhongMaterial({
+    map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png'),
+    normalScale: new THREE.Vector2(1, 1),
+  });
+
+  const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
+  scene.add(tubeMesh);
+  ropeMeshes.push(tubeMesh);
+}
+
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
@@ -403,7 +440,7 @@ world.addConstraint(anchorEndConstraint);
 
 const ropeMeshes = [];
 const ropeGeom = new THREE.SphereGeometry(segmentWidth / 2, 16, 16);
-const ropeMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+const ropeMaterial = new THREE.MeshPhongMaterial({ transparent: false, map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png') });
 
 for (let i = 0; i < segmentCount; i++) {
   const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
@@ -412,7 +449,7 @@ for (let i = 0; i < segmentCount; i++) {
 }
 
 function addRopeSegment(){
-  if (ropeBodies.length >= 10000) return;
+  if (ropeBodies.length >= 2000) return;
   
   const prevBody = ropeBodies[10]; 
   const nextBody = ropeBodies[11]; 
@@ -474,6 +511,7 @@ function createCoiler() {
   coilerBody.position.set(0.57, 0.0, 0.025);
   coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
+  /*
 
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
@@ -489,6 +527,7 @@ function createCoiler() {
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
+  */
 }
 
 let coilerBodySide1 = null;
@@ -528,7 +567,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide1.position.set(0.57, 0.0, 0.13); 
+  coilerBodySide1.position.set(0.57, 0.0, 0.12); 
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
 
@@ -541,7 +580,7 @@ function createCoilerSides() {
   coilerBodySide2.position.set(0.57, 0.0, -0.07); 
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
-
+  /* coiler Meshes
   const cylinderGeoSide = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
   cylinderGeoSide.rotateX(Math.PI / 2); 
 
@@ -553,28 +592,42 @@ function createCoilerSides() {
   });
 
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide, wireMatSide);
-  coilerBodyMeshSide1.position.set(0.57, 0.0, 0.13);
+  coilerBodyMeshSide1.position.set(0.57, 0.0, 0.12);
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
   scene.add(coilerBodyMeshSide2);
+  */
 };
 
 function animate() {
   requestAnimationFrame(animate);
+  world.step(1/300);
 
-  world.step(1/200);
-  for (let i = 0; i < ropeBodies.length; i++) {
-    ropeMeshes[i].position.copy(ropeBodies[i].position);
-    ropeMeshes[i].quaternion.copy(ropeBodies[i].quaternion);
+  // Only update rope geometry if meshes exist
+  if (ropeMeshes.length > 0) {
+    updateRopeCurve();
+    const curve = new THREE.CatmullRomCurve3(ropePoints);
+    if (ropeMeshes[0]) {
+      ropeMeshes[0].geometry.dispose();
+      ropeMeshes[0].geometry = new THREE.TubeGeometry(curve, segmentCount * 4, ropeRadius, 8, false);
+    }
+
+    // Update positions and rotations
+    for (let i = 0; i < ropeBodies.length; i++) {
+      if (ropeMeshes[i]) {
+        ropeMeshes[i].position.copy(ropeBodies[i].position);
+        ropeMeshes[i].quaternion.copy(ropeBodies[i].quaternion);
+      }
+    }
   }
 
   if (isPlaying && movingModel) {
-    movingModel.rotation.z += 0.026;
+    movingModel.rotation.z += 0.019;
   }
   
-  if (dummy){
+  if (dummy) {
     dummy.getWorldPosition(temp);
     anchorEnd.position.x = temp.x;
     anchorEnd.position.y = temp.y;
@@ -583,8 +636,12 @@ function animate() {
     anchorEnd.angularVelocity.set(0, 0, 0);
   }
 
+  // Only call createRopeMesh if needed
+  if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
+    createRopeMesh();
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }
-
 animate();
