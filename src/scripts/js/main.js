@@ -524,7 +524,7 @@ function createCoiler() {
   coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
 
-  /* COILER MESHES
+  
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -539,7 +539,6 @@ function createCoiler() {
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
-  */
 
 }
 
@@ -594,7 +593,7 @@ function createCoilerSides() {
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
-  /*
+  
   const cylinderGeoSide = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
   cylinderGeoSide.rotateX(Math.PI / 2); 
 
@@ -612,7 +611,7 @@ function createCoilerSides() {
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
   scene.add(coilerBodyMeshSide2);
-  */
+  
 };
 
 function animate() {
