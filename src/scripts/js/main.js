@@ -388,45 +388,6 @@ for (let i = 0; i < segmentCount -1; i++) {
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
 
-/* Purposed code to segment into seperate lengths, going to attempt to just insert at index 10
-
-const segmentCountStatic = 20;
-const segmentWidthStatic = 0.02;
-const segmentMassStatic = 1;
-const segmentDistanceStatic = 0.00005;
-const ropeBodiesStatic = [];
-
-for (let i = 0; i < segmentCountStatic; i++) {
-  const sphereShapeStatic = new Sphere(segmentWidthStatic / 2);
-  const segmentBodyStatic = new Body({ mass: segmentMassStatic, shape: sphereShapeStatic, position: new Vec3(0, 3 -i * segmentDistanceStatic, 0), material: defaultMaterial });
-  segmentBodyStatic.angularDamping = 0.9;
-  segmentBodyStatic.linearDamping = 0.9;
-  segmentBodyStatic.sleepSpeedLimit = 10;
-  segmentBodyStatic.sleepTimeLimit = 0.1;
-
-  world.addBody(segmentBodyStatic);
-  ropeBodiesStatic.push(segmentBodyStatic);
-}
-
-for (let i = 0; i < segmentCountStatic -1; i++) {
-  const segmentBodyStatic = ropeBodiesStatic[i];
-  const bodyBStatic = ropeBodiesStatic[i + 1];  
-  const constraintStatic = new DistanceConstraint(bodyBStatic, bodyBStatic, segmentDistanceStatic);
-  world.addConstraint(constraintStatic);
-}
-
-const ropeMeshesStatic = [];
-const ropeGeomStatic = new THREE.SphereGeometry(segmentWidthStatic / 2, 16, 16);
-const ropeMaterialStatic = new THREE.MeshPhongMaterial({ color: 0xFF2C2C });
-
-for (let i = 0; i < segmentCountStatic; i++) {
-  const mesh = new THREE.Mesh(ropeGeomStatic, ropeMaterialStatic);
-  scene.add(mesh);
-  ropeMeshesStatic.push(mesh);
-}
-
-*/
-
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.0, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
@@ -450,9 +411,6 @@ const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
 world.addConstraint(anchorEndConstraint);
 
 const ropeMeshes = [];
-
-//const ropeGeom = new THREE.SphereGeometry(segmentWidth / 2, 16, 16);
-//const ropeMaterial = new THREE.MeshPhongMaterial({ transparent: false, map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png') });
 
 /*for (let i = 0; i < segmentCount; i++) {
   const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
@@ -489,9 +447,6 @@ function addRopeSegment(){
   const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance);
   world.addConstraint(constraintPrev);
   world.addConstraint(constraintNext);
-  /*const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
-  scene.add(mesh);
-  ropeMeshes.splice(11, 0, mesh);*/
 }
 
 let dummy = null;
