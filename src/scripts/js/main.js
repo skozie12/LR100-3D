@@ -193,7 +193,7 @@ function onDropdownChange() {
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
         dummy = new THREE.Object3D();
-        dummy.position.set(0.18, 0.06, -0.03);
+        dummy.position.set(0.19, 0.06, -0.03);
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
@@ -307,7 +307,7 @@ const world = new World({
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: -10, // Play With 
+  friction: 1, // Play With 
   restitution: 0.1,
   contactEquationStiffness: 1e8,
   contactEquationRelaxation: 3
@@ -315,9 +315,9 @@ world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMater
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 40; // Play with
+const segmentCount = 20; // Play with
 const segmentWidth = 0.015;
-const segmentMass = 0.1;
+const segmentMass = 1;
 const segmentDistance = 0.008;
 
 const ropeBodies = [];
@@ -349,9 +349,9 @@ function createRopeMesh(){
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 6, // Reduced multiplier for better alignment
+    segmentCount * 20, // Reduced multiplier for better alignment
     ropeRadius * 0.8, // Slightly reduced radius to match spheres
-    26, 
+    32, 
     false
   );
 
@@ -388,25 +388,21 @@ for (let i = 0; i < segmentCount -1; i++) {
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
 
-const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.57, 0.0, 0.025);
-anchorEnd.type = BODY_TYPES.KINEMATIC;
-world.addBody(anchorEnd);
-
-const anchorStart = new Body({ mass: 0 });
+const anchorStart = new Body({ mass: 0, type: BODY_TYPES.STATIC });
 anchorStart.position.set(-0.6, 0.07, 0.03);
 world.addBody(anchorStart);
-
-const anchor = new Body({ mass: 0 });
-anchor.position.set(0, 0.075, 0.03);
-world.addBody(anchor);
-
-const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
-world.addConstraint(anchorConstraint);
-
 const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
 world.addConstraint(anchorStartConstraint);
 
+const anchor = new Body({ mass: 0, type: BODY_TYPES.STATIC });
+anchor.position.set(0.09, 0.065, 0.03);
+world.addBody(anchor);
+const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
+world.addConstraint(anchorConstraint);
+
+const anchorEnd = new Body({ mass: 0, type: BODY_TYPES.STATIC });
+anchorEnd.position.set(0.19, 0.06, -0.03);
+world.addBody(anchorEnd);
 const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
 world.addConstraint(anchorEndConstraint);
 
@@ -569,9 +565,48 @@ function createCoilerSides() {
   
 };
 
+function createCounterTube(){
+ 
+  const counterTubeGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 16, 1, true, 0, Math.PI * 2);
+  const counterTubeMat = new THREE.MeshPhongMaterial({ 
+    color: 0x0000FF,
+    side: THREE.DoubleSide
+  });
+  const counterTubeMesh = new THREE.Mesh(counterTubeGeo, counterTubeMat);
+  counterTubeMesh.position.set(0.03, 0.06, 0.03);
+  counterTubeMesh.rotation.set(0, 0, Math.PI / 2);
+  scene.add(counterTubeMesh);
+
+  const cannonTubeShape = new Cylinder(0.02, 0.02, 0.1, 16);
+  const cannonTube = new Body({
+    mass: 0,
+    type: BODY_TYPES.STATIC,
+    shape: cannonTubeShape,
+    material: defaultMaterial
+  });
+  cannonTube.position.set(0.03, 0.06, 0.03);
+  const q = new CQuaternion();
+  q.setFromAxisAngle(new Vec3(0, 0, 1), Math.PI / 2);
+  cannonTube.quaternion.copy(q);
+  world.addBody(cannonTube);
+
+  const debugGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 16);
+  const debugMat = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    wireframe: true,
+    opacity: 0.5,
+    transparent: true
+  });
+  const debugMesh = new THREE.Mesh(debugGeo, debugMat);
+  debugMesh.position.copy(counterTubeMesh.position);
+  debugMesh.rotation.copy(counterTubeMesh.rotation);
+  scene.add(debugMesh);
+}
+createCounterTube();
+
 function animate() {
   requestAnimationFrame(animate);
-  world.step(1/300);
+  world.step(1/1000);
 
   if (ropeBodies.length > 0) {
     updateRopeCurve();
@@ -580,9 +615,9 @@ function animate() {
       ropeMeshes[0].geometry.dispose();
       ropeMeshes[0].geometry = new THREE.TubeGeometry(
         curve, 
-        segmentCount * 2,
+        segmentCount * 20, // Segment makes smoother bends
         ropeRadius * 0.8,
-        8, 
+        32, // Circularity
         false
       )
     } 
@@ -600,7 +635,6 @@ function animate() {
     anchorEnd.velocity.set(0, 0, 0);
     anchorEnd.angularVelocity.set(0, 0, 0);
   }
-
   if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
     createRopeMesh();
   }
