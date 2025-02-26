@@ -1,6 +1,7 @@
 //THIS FILE IS THE UNMOVING EDITION - WORKING AND LATEST
 //THIS FILE LOADS EACH COMBINATION AS ITS OWN .GLTF TO REDUCE MEMORY USAGE
 //THE MOVING VERSION OF THIS FILE LOADS EACH INDIVIDUAL COMPONENT WITHIN THREE.JS, AND HAS TROUBLE FREEING MEMORY
+// This file is outdated, functionality is untested and may not work as intended
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
