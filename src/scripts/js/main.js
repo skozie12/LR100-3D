@@ -302,21 +302,23 @@ function updatePrice() {
 }
 
 const world = new World({
-  gravity: new Vec3(0, -5, 0),
+  gravity: new Vec3(0, -9, 0),
 });
 
 const defaultMaterial = new Material('defaultMaterial');
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: -100, // Play With 
+  friction: -10, // Play With 
   restitution: 0.1,
+  contactEquationStiffness: 1e8,
+  contactEquationRelaxation: 3
 
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 30; // Play with
-const segmentWidth = 0.02;
-const segmentMass = 1;
-const segmentDistance = 0.01;
+const segmentCount = 40; // Play with
+const segmentWidth = 0.015;
+const segmentMass = 0.1;
+const segmentDistance = 0.008;
 
 const ropeBodies = [];
 const ropePoints = [];
@@ -345,17 +347,26 @@ function createRopeMesh(){
 
   updateRopeCurve();
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
-  const tubeGeometry = new THREE.TubeGeometry(curve, segmentCount * 4, ropeRadius, 8, false);
-  const ropeMaterial = new THREE.MeshPhongMaterial({
+  const tubeGeometry = new THREE.TubeGeometry(
+    curve, 
+    segmentCount * 6, // Reduced multiplier for better alignment
+    ropeRadius * 0.8, // Slightly reduced radius to match spheres
+    26, 
+    false
+  );
+
+  const ropeMaterial = new THREE.MeshStandardMaterial({
     map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png'),
     normalScale: new THREE.Vector2(1, 1),
+    roughness: 0.7,
+    metalness: 0.2,
+    side: THREE.DoubleSide
   });
 
   const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
   scene.add(tubeMesh);
   ropeMeshes.push(tubeMesh);
 }
-
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
@@ -439,14 +450,15 @@ const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
 world.addConstraint(anchorEndConstraint);
 
 const ropeMeshes = [];
-const ropeGeom = new THREE.SphereGeometry(segmentWidth / 2, 16, 16);
-const ropeMaterial = new THREE.MeshPhongMaterial({ transparent: false, map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png') });
 
-for (let i = 0; i < segmentCount; i++) {
+//const ropeGeom = new THREE.SphereGeometry(segmentWidth / 2, 16, 16);
+//const ropeMaterial = new THREE.MeshPhongMaterial({ transparent: false, map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png') });
+
+/*for (let i = 0; i < segmentCount; i++) {
   const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
   scene.add(mesh);
   ropeMeshes.push(mesh);
-}
+}*/
 
 function addRopeSegment(){
   if (ropeBodies.length >= 2000) return;
@@ -477,9 +489,9 @@ function addRopeSegment(){
   const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance);
   world.addConstraint(constraintPrev);
   world.addConstraint(constraintNext);
-  const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
+  /*const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
   scene.add(mesh);
-  ropeMeshes.splice(11, 0, mesh);
+  ropeMeshes.splice(11, 0, mesh);*/
 }
 
 let dummy = null;
@@ -487,7 +499,7 @@ const temp = new THREE.Vector3();
 
 let coilerBody = null;
 let coilerBodyMesh = null;
-let coilerRadius = 0.187;
+let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 
 function createCoiler() {
@@ -512,7 +524,6 @@ function createCoiler() {
   coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
   /*
-
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -580,7 +591,8 @@ function createCoilerSides() {
   coilerBodySide2.position.set(0.57, 0.0, -0.07); 
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
-  /* coiler Meshes
+  
+  /*
   const cylinderGeoSide = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
   cylinderGeoSide.rotateX(Math.PI / 2); 
 
@@ -605,23 +617,20 @@ function animate() {
   requestAnimationFrame(animate);
   world.step(1/300);
 
-  // Only update rope geometry if meshes exist
-  if (ropeMeshes.length > 0) {
+  if (ropeBodies.length > 0) {
     updateRopeCurve();
-    const curve = new THREE.CatmullRomCurve3(ropePoints);
-    if (ropeMeshes[0]) {
+    if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+      const curve = new THREE.CatmullRomCurve3(ropePoints);
       ropeMeshes[0].geometry.dispose();
-      ropeMeshes[0].geometry = new THREE.TubeGeometry(curve, segmentCount * 4, ropeRadius, 8, false);
-    }
-
-    // Update positions and rotations
-    for (let i = 0; i < ropeBodies.length; i++) {
-      if (ropeMeshes[i]) {
-        ropeMeshes[i].position.copy(ropeBodies[i].position);
-        ropeMeshes[i].quaternion.copy(ropeBodies[i].quaternion);
-      }
-    }
-  }
+      ropeMeshes[0].geometry = new THREE.TubeGeometry(
+        curve, 
+        segmentCount * 2,
+        ropeRadius * 0.8,
+        8, 
+        false
+      )
+    } 
+  };
 
   if (isPlaying && movingModel) {
     movingModel.rotation.z += 0.019;
@@ -636,11 +645,9 @@ function animate() {
     anchorEnd.angularVelocity.set(0, 0, 0);
   }
 
-  // Only call createRopeMesh if needed
   if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
     createRopeMesh();
   }
-
   controls.update();
   renderer.render(scene, camera);
 }

@@ -11,7 +11,7 @@ node.js: to run javascript application on the web
 cannon.js: physics engine yet to be implemented, will be used for cable and collision physics
 
 Wordpress Plugin Bullshit || post-dev
-- Port to WP plugin: GHP
+- Port to WP plugin
 - Attempt to integrate into the Wordpress staging site
 - Decide whether to just make it a full web-page, or a window-esque plugin
 
