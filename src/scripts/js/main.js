@@ -523,7 +523,8 @@ function createCoiler() {
   coilerBody.position.set(0.57, 0.0, 0.025);
   coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
-  /*
+
+  /* COILER MESHES
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -539,6 +540,7 @@ function createCoiler() {
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
   */
+
 }
 
 let coilerBodySide1 = null;
