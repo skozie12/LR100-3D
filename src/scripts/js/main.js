@@ -1,9 +1,9 @@
-// Description: Main JavaScript file for the LR100 project.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
 
+// Description: Main JavaScript file for the LR100 project.
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
@@ -92,6 +92,12 @@ let segmentTimer = null;
 function onPlayClick() {
   if (!isPlaying) { 
     isPlaying = true;
+    
+    // Reset coiling variables when starting
+    addedSegments = 0;
+    currentZ = -coilerHeight * 0.4; // Start from one end
+    currentDirection = 1;
+    
     segmentTimer = setInterval(() => {
       if (isPlaying) {
         addRopeSegment();
@@ -302,22 +308,27 @@ function updatePrice() {
 }
 
 const world = new World({
-  gravity: new Vec3(0, -9, 0),
+  gravity: new Vec3(0, -9.81, 0), // Standard gravity
 });
 
 const defaultMaterial = new Material('defaultMaterial');
-world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: 1, // Play With 
-  restitution: 0.1,
-  contactEquationStiffness: 1e8,
-  contactEquationRelaxation: 3
+const COLLISION_GROUPS = {
+  COILER: 1,
+  ROPE: 2
+};
 
+// Improve contact physics for better rope-coiler interaction
+world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
+  friction: 1.5, // Higher friction to help rope grip the coiler
+  restitution: 0.1,
+  contactEquationStiffness: 1e7, // Balanced stiffness
+  contactEquationRelaxation: 4 // Slightly higher relaxation for stability
 });
 world.defaultMaterial = defaultMaterial;
 
 const segmentCount = 20; // Play with
 const segmentWidth = 0.015;
-const segmentMass = 1;
+const segmentMass = 0.5; // Lower mass for more stable physics
 const segmentDistance = 0.008;
 
 const ropeBodies = [];
@@ -370,7 +381,14 @@ function createRopeMesh(){
 
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
-  const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0), material: defaultMaterial });
+  const segmentBody = new Body({ 
+    mass: segmentMass, 
+    shape: sphereShape, 
+    position: new Vec3(0, 3 - i * segmentDistance, 0), 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.ROPE,
+    collisionFilterMask: COLLISION_GROUPS.COILER
+  });
   segmentBody.angularDamping = 0.99;
   segmentBody.linearDamping = 0.99;
 
@@ -414,6 +432,25 @@ const ropeMeshes = [];
   ropeMeshes.push(mesh);
 }*/
 
+// Add a helper function to distribute rope along the coiler
+function getCoilPosition(progress) {
+  // This will determine where along the coiler height to place the rope
+  // progress goes from 0 to 1 as more rope is added
+  const coilerZ = coilerBody.position.z;
+  
+  // Calculate position along coiler based on winding progress
+  // Start from one side and gradually move to the other side
+  const zOffset = ((progress % 1) * coilerHeight) - (coilerHeight / 2);
+  
+  return coilerZ + zOffset;
+}
+
+// Track how many segments we've added for coil distribution
+let addedSegments = 0;
+const maxSegmentsPerLayer = 20;
+let currentZ = 0;
+let currentDirection = 1;
+
 function addRopeSegment(){
   if (ropeBodies.length >= 2000) return;
   
@@ -427,6 +464,24 @@ function addRopeSegment(){
     }
   });
 
+  // Calculate ideal z position for even coiling
+  addedSegments++;
+  
+  // When we reach max segments in a layer, change direction
+  if (addedSegments % maxSegmentsPerLayer === 0) {
+    currentDirection *= -1; // Reverse direction
+  }
+  
+  // Gradually move along Z axis in current direction
+  currentZ += currentDirection * (coilerHeight / maxSegmentsPerLayer) * 0.8;
+  
+  // Keep within coiler bounds
+  const zMax = coilerHeight * 0.4;
+  currentZ = Math.max(Math.min(currentZ, zMax), -zMax);
+  
+  // Add offset to the z position of the new segment to help guide winding
+  const zTarget = coilerBody.position.z + currentZ;
+
   const newBody = new Body({ 
     mass: segmentMass, 
     shape: new Sphere(segmentWidth / 2), 
@@ -435,14 +490,26 @@ function addRopeSegment(){
       (prevBody.position.y + nextBody.position.y) * 0.5,
       (prevBody.position.z + nextBody.position.z) * 0.5
     ),
-    material: defaultMaterial 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.ROPE,
+    collisionFilterMask: COLLISION_GROUPS.COILER
   });
+  
+  // Add damping to reduce jittery movement
+  newBody.angularDamping = 0.99;
+  newBody.linearDamping = 0.99;
+  
   world.addBody(newBody);
   ropeBodies.splice(11, 0, newBody); 
-  const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance);
-  const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance);
+  
+  // Make constraints slightly stronger for more stability
+  const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
+  const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
   world.addConstraint(constraintPrev);
   world.addConstraint(constraintNext);
+  
+  // Apply a small force in the target Z direction to guide the rope
+  newBody.applyForce(new Vec3(0, 0, (zTarget - newBody.position.z) * 1), newBody.position);
 }
 
 let dummy = null;
@@ -464,18 +531,45 @@ function createCoiler() {
     coilerBodyMesh.material.dispose();
     coilerBodyMesh = null;
   }
-  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  
+  // Create a compound shape for better physics interaction
   coilerBody = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
-    shape: cylinderShape, 
-    material: defaultMaterial 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.COILER,
+    collisionFilterMask: COLLISION_GROUPS.ROPE
   });
+  
+  // Main cylinder
+  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
+  
+  // Add guide ridges along the cylinder to help distribute the rope
+  // These are smaller cylinders arranged in a spiral pattern
+  const smallCylinderRadius = coilerRadius * 0.08;
+  const spiralTurns = 4;
+  
+  for (let i = 0; i < 24; i++) {
+    // Create a spiral pattern along the length of the cylinder
+    const angle = (i / 24) * Math.PI * 2 * spiralTurns;
+    const zPos = ((i / 24) * coilerHeight) - (coilerHeight / 2);
+    
+    const x = coilerRadius * 0.95 * Math.cos(angle);
+    const y = coilerRadius * 0.95 * Math.sin(angle);
+    
+    const smallCylinder = new Cylinder(smallCylinderRadius, smallCylinderRadius, smallCylinderRadius * 2, 8);
+    coilerBody.addShape(
+      smallCylinder, 
+      new Vec3(x, y, zPos), 
+      new CQuaternion().setFromAxisAngle(new Vec3(0, 0, 1), angle + Math.PI/2)
+    );
+  }
+  
   coilerBody.position.set(0.57, 0.0, 0.025);
-  coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
 
-  
+  // Visual representation  
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -490,7 +584,11 @@ function createCoiler() {
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
-
+  
+  // Reset coiling variables
+  addedSegments = 0;
+  currentZ = -coilerHeight * 0.4; // Start from one end
+  currentDirection = 1;
 }
 
 let coilerBodySide1 = null;
@@ -522,13 +620,17 @@ function createCoilerSides() {
     coilerBodyMeshSide2 = null;
   }
 
-  const cylinderShapeSide = new Cylinder(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16);
+  // Create flared sides to help guide the rope
+  const cylinderShapeSide1 = new Cylinder(coilerRadius * 2.2, coilerRadius * 2, coilerHeight / 8, 16);
+  const cylinderShapeSide2 = new Cylinder(coilerRadius * 2.2, coilerRadius * 2, coilerHeight / 8, 16);
  
   coilerBodySide1 = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
-    shape: cylinderShapeSide, 
-    material: defaultMaterial 
+    shape: cylinderShapeSide1, 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.COILER,
+    collisionFilterMask: COLLISION_GROUPS.ROPE
   });
   coilerBodySide1.position.set(0.57, 0.0, 0.12); 
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
@@ -537,16 +639,20 @@ function createCoilerSides() {
   coilerBodySide2 = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
-    shape: cylinderShapeSide, 
-    material: defaultMaterial 
+    shape: cylinderShapeSide2, 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.COILER,
+    collisionFilterMask: COLLISION_GROUPS.ROPE
   });
   coilerBodySide2.position.set(0.57, 0.0, -0.07); 
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
-  
-  const cylinderGeoSide = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
-  cylinderGeoSide.rotateX(Math.PI / 2); 
+  // Visual representation for the sides
+  const cylinderGeoSide1 = new THREE.CylinderGeometry(coilerRadius * 2.2, coilerRadius * 2, coilerHeight / 8, 16, 1);
+  const cylinderGeoSide2 = new THREE.CylinderGeometry(coilerRadius * 2.2, coilerRadius * 2, coilerHeight / 8, 16, 1);
+  cylinderGeoSide1.rotateX(Math.PI / 2);
+  cylinderGeoSide2.rotateX(Math.PI / 2);
 
   const wireMatSide = new THREE.MeshBasicMaterial({
     color: 0x0000FF,
@@ -555,11 +661,11 @@ function createCoilerSides() {
     wireframe: true,
   });
 
-  coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide, wireMatSide);
+  coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
   coilerBodyMeshSide1.position.set(0.57, 0.0, 0.12);
   scene.add(coilerBodyMeshSide1);
   
-  coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide.clone(), wireMatSide);
+  coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.0, -0.07);
   scene.add(coilerBodyMeshSide2);
   
@@ -604,9 +710,64 @@ function createCounterTube(){
 }
 createCounterTube();
 
+function applyRotationForceToRope() {
+  if (!coilerBody || !isPlaying) return;
+  
+  const coilerPos = coilerBody.position;
+  const rotationSpeed = 3; // Match this with the coiler rotation speed
+  
+  // Apply different forces based on segment position
+  ropeBodies.forEach((segment, index) => {
+    const dx = segment.position.x - coilerPos.x;
+    const dy = segment.position.y - coilerPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Only apply force if segment is close enough to coiler
+    if (distance < coilerRadius * 3) {
+      // Calculate tangential direction based on current position relative to coiler
+      const angle = Math.atan2(dy, dx);
+      const tangentX = -Math.sin(angle) * rotationSpeed * 0.05;
+      const tangentY = Math.cos(angle) * rotationSpeed * 0.05;
+      
+      // Apply stronger rotational force to segments closer to coiler
+      const forceFactor = 0.05 * (1 - (distance / (coilerRadius * 3)));
+      segment.applyForce(new Vec3(tangentX * forceFactor * 2, tangentY * forceFactor * 2, 0), segment.position);
+      
+      // Add a slight pulling force toward the coiler center on X-Y plane
+      if (distance > coilerRadius * 0.9) {
+        const pullForce = 0.001 * (distance / coilerRadius);
+        segment.applyForce(
+          new Vec3(-dx * pullForce, -dy * pullForce, 0), 
+          segment.position
+        );
+      }
+      
+      // Apply a small force to maintain the vertical distribution
+      // Stronger for segments that are actively being coiled (around index 11)
+      if (Math.abs(index - 11) < 5) {
+        // Calculate ideal Z position for this segment based on coil progress
+        const idealZ = coilerPos.z + currentZ;
+        const zDiff = idealZ - segment.position.z;
+        
+        // Apply corrective force in Z direction
+        segment.applyForce(new Vec3(0, 0, zDiff * 0.01), segment.position);
+      }
+    }
+  });
+}
+
 function animate() {
   requestAnimationFrame(animate);
-  world.step(1/1000);
+  
+  // Use multiple substeps for more stable physics
+  const timeStep = 1/60;
+  const subSteps = 3; // Increase substeps for more accurate physics
+  for (let i = 0; i < subSteps; i++) {
+    world.step(timeStep / subSteps);
+  }
+
+  // Apply rotation force to help rope coil properly
+  applyRotationForceToRope();
 
   if (ropeBodies.length > 0) {
     updateRopeCurve();
@@ -617,7 +778,7 @@ function animate() {
         curve, 
         segmentCount * 20, // Segment makes smoother bends
         ropeRadius * 0.8,
-        32, // Circularity
+        16, // Reduced for better performance
         false
       )
     } 
@@ -627,18 +788,8 @@ function animate() {
     movingModel.rotation.z += 0.019;
   }
   
-  if (dummy) {
-    dummy.getWorldPosition(temp);
-    anchorEnd.position.x = temp.x;
-    anchorEnd.position.y = temp.y;
-    anchorEnd.position.z = temp.z;
-    anchorEnd.velocity.set(0, 0, 0);
-    anchorEnd.angularVelocity.set(0, 0, 0);
-  }
-  if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
-    createRopeMesh();
-  }
-  controls.update();
-  renderer.render(scene, camera);
-}
-animate();
+  if (isPlaying) {
+    // Apply rotation to the coiler physics bodies
+    const rotationSpeed = -3;
+    if (coilerBody) coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+    if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
