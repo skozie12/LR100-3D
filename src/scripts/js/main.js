@@ -301,24 +301,34 @@ function updatePrice() {
   }
 }
 
+// Adjust physics world settings for more natural coiling
 const world = new World({
-  gravity: new Vec3(0, -9, 0),
+  gravity: new Vec3(0, -9.81, 0), // Normal Earth gravity
 });
 
 const defaultMaterial = new Material('defaultMaterial');
-world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: -10, // Play With 
-  restitution: 0.1,
-  contactEquationStiffness: 1e8,
-  contactEquationRelaxation: 3
+const COLLISION_GROUPS = {
+  COILER: 1,
+  ROPE: 2,
+  ROPE_SEGMENT: 4  // For self-collision
+};
 
+// Refine contact material for better friction behavior
+world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
+  friction: 0.7,             // More realistic friction (was -10)
+  restitution: 0.05,         // Very low bounce
+  contactEquationStiffness: 1e6, // Lower stiffness for more natural behavior
+  contactEquationRelaxation: 4,  // Higher relaxation for stability
+  frictionEquationStiffness: 1e6, // Added for better friction
+  frictionEquationRelaxation: 4   // Added for better friction
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 40; // Play with
-const segmentWidth = 0.015;
-const segmentMass = 0.1;
-const segmentDistance = 0.008;
+// Refine rope segment parameters
+const segmentCount = 40;
+const segmentWidth = 0.012;    // Slightly thinner for more natural appearance
+const segmentMass = 0.15;      // Increased mass for better momentum
+const segmentDistance = 0.01;  // Slightly increased distance
 
 const ropeBodies = [];
 const ropePoints = [];
@@ -349,9 +359,9 @@ function createRopeMesh(){
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 6, // Reduced multiplier for better alignment
+    segmentCount * 24, // Reduced multiplier for better alignment
     ropeRadius * 0.8, // Slightly reduced radius to match spheres
-    26, 
+    32, 
     false
   );
 
@@ -368,64 +378,35 @@ function createRopeMesh(){
   ropeMeshes.push(tubeMesh);
 }
 
+// Update rope body creation to include self-collision
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
-  const segmentBody = new Body({ mass: segmentMass, shape: sphereShape, position: new Vec3(0, 3 -i * segmentDistance, 0), material: defaultMaterial });
-  segmentBody.angularDamping = 0.99;
-  segmentBody.linearDamping = 0.99;
-
+  const segmentBody = new Body({ 
+    mass: segmentMass, 
+    shape: sphereShape, 
+    position: new Vec3(0, 3 - i * segmentDistance, 0), 
+    material: defaultMaterial,
+    // Enable collision with coiler AND other rope segments:
+    collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
+    collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
+  });
+  segmentBody.angularDamping = 0.95; // Reduced damping for more natural movement
+  segmentBody.linearDamping = 0.95;  // Reduced damping for more natural movement
+  
   world.addBody(segmentBody);
   ropeBodies.push(segmentBody);
 }
 
-for (let i = 0; i < segmentCount -1; i++) {
+// Add stronger constraints between segments
+for (let i = 0; i < segmentCount - 1; i++) {
   const bodyA = ropeBodies[i];
   const bodyB = ropeBodies[i + 1];  
-  const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance);
+  const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 3e6); // Added stiffness parameter
   world.addConstraint(constraint);
 }
 
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
-
-/* Purposed code to segment into seperate lengths, going to attempt to just insert at index 10
-
-const segmentCountStatic = 20;
-const segmentWidthStatic = 0.02;
-const segmentMassStatic = 1;
-const segmentDistanceStatic = 0.00005;
-const ropeBodiesStatic = [];
-
-for (let i = 0; i < segmentCountStatic; i++) {
-  const sphereShapeStatic = new Sphere(segmentWidthStatic / 2);
-  const segmentBodyStatic = new Body({ mass: segmentMassStatic, shape: sphereShapeStatic, position: new Vec3(0, 3 -i * segmentDistanceStatic, 0), material: defaultMaterial });
-  segmentBodyStatic.angularDamping = 0.9;
-  segmentBodyStatic.linearDamping = 0.9;
-  segmentBodyStatic.sleepSpeedLimit = 10;
-  segmentBodyStatic.sleepTimeLimit = 0.1;
-
-  world.addBody(segmentBodyStatic);
-  ropeBodiesStatic.push(segmentBodyStatic);
-}
-
-for (let i = 0; i < segmentCountStatic -1; i++) {
-  const segmentBodyStatic = ropeBodiesStatic[i];
-  const bodyBStatic = ropeBodiesStatic[i + 1];  
-  const constraintStatic = new DistanceConstraint(bodyBStatic, bodyBStatic, segmentDistanceStatic);
-  world.addConstraint(constraintStatic);
-}
-
-const ropeMeshesStatic = [];
-const ropeGeomStatic = new THREE.SphereGeometry(segmentWidthStatic / 2, 16, 16);
-const ropeMaterialStatic = new THREE.MeshPhongMaterial({ color: 0xFF2C2C });
-
-for (let i = 0; i < segmentCountStatic; i++) {
-  const mesh = new THREE.Mesh(ropeGeomStatic, ropeMaterialStatic);
-  scene.add(mesh);
-  ropeMeshesStatic.push(mesh);
-}
-
-*/
 
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.0, 0.025);
@@ -461,37 +442,81 @@ const ropeMeshes = [];
 }*/
 
 function addRopeSegment(){
-  if (ropeBodies.length >= 2000) return;
-  
-  const prevBody = ropeBodies[10]; 
-  const nextBody = ropeBodies[11]; 
-  
-  world.constraints.forEach((constraint) => {
-    if ((constraint.bodyA === prevBody && constraint.bodyB === nextBody) ||
-        (constraint.bodyA === nextBody && constraint.bodyB === prevBody)) {
-      world.removeConstraint(constraint);
-    }
-  });
+  try {
+    if (ropeBodies.length >= 500) return; // Cap segments for performance
+    
+    if (ropeBodies.length < 11) return; // Safety check
+    
+    const prevBody = ropeBodies[10]; 
+    const nextBody = ropeBodies[11]; 
+    
+    // Find and remove existing constraint
+    world.constraints.forEach((constraint) => {
+      if ((constraint.bodyA === prevBody && constraint.bodyB === nextBody) ||
+          (constraint.bodyA === nextBody && constraint.bodyB === prevBody)) {
+        world.removeConstraint(constraint);
+      }
+    });
 
-  const newBody = new Body({ 
-    mass: segmentMass, 
-    shape: new Sphere(segmentWidth / 2), 
-    position: new Vec3(
-      (prevBody.position.x + nextBody.position.x) * 0.5,
-      (prevBody.position.y + nextBody.position.y) * 0.5,
-      (prevBody.position.z + nextBody.position.z) * 0.5
-    ),
-    material: defaultMaterial 
-  });
-  world.addBody(newBody);
-  ropeBodies.splice(11, 0, newBody); 
-  const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance);
-  const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance);
-  world.addConstraint(constraintPrev);
-  world.addConstraint(constraintNext);
-  /*const mesh = new THREE.Mesh(ropeGeom, ropeMaterial);
-  scene.add(mesh);
-  ropeMeshes.splice(11, 0, mesh);*/
+    // Update coiling parameters for z-position distribution
+    if (!window.addedSegments) window.addedSegments = 0;
+    window.addedSegments++;
+    
+    if (!window.currentDirection) window.currentDirection = 1;
+    if (!window.currentZ) window.currentZ = 0;
+    
+    // Adjust Z movement pattern for even coiling
+    if (window.addedSegments % 30 === 0) {
+      window.currentDirection *= -1;
+    }
+    
+    window.currentZ += window.currentDirection * (coilerHeight / 60) * 0.9;
+    const maxZ = coilerHeight * 0.4;
+    window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
+    
+    // Create new position based on previous segment, not artificially biased
+    const newBody = new Body({ 
+      mass: segmentMass, 
+      shape: new Sphere(segmentWidth / 2), 
+      position: new Vec3(
+        prevBody.position.x,
+        prevBody.position.y,
+        prevBody.position.z
+      ),
+      material: defaultMaterial,
+      collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
+      collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
+    });
+    
+    // Give it a slight initial velocity toward the coiler - very subtle
+    if (coilerBody) {
+      const dx = coilerBody.position.x - prevBody.position.x;
+      const dy = coilerBody.position.y - prevBody.position.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist > 0.1) { // Only apply if not already close to coiler
+        newBody.velocity.set(
+          dx * 0.02, 
+          dy * 0.02, 
+          0
+        );
+      }
+    }
+    
+    newBody.angularDamping = 0.95;
+    newBody.linearDamping = 0.95;
+    
+    world.addBody(newBody);
+    ropeBodies.splice(11, 0, newBody); 
+    
+    // Add constraints with higher stiffness for more stable rope
+    const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 3e6);
+    const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 3e6);
+    world.addConstraint(constraintPrev);
+    world.addConstraint(constraintNext);
+  } catch (err) {
+    console.error("Error in addRopeSegment:", err);
+  }
 }
 
 let dummy = null;
@@ -502,6 +527,7 @@ let coilerBodyMesh = null;
 let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 
+// Improve the createCoiler function to add texture and better shape
 function createCoiler() {
   if (coilerBody) {
     world.removeBody(coilerBody);
@@ -513,18 +539,41 @@ function createCoiler() {
     coilerBodyMesh.material.dispose();
     coilerBodyMesh = null;
   }
-  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  
+  // Create a compound shape for the coiler with bumps to catch the rope better
   coilerBody = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
-    shape: cylinderShape, 
-    material: defaultMaterial 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.COILER,
+    collisionFilterMask: COLLISION_GROUPS.ROPE
   });
+  
+  // Main cylinder
+  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
+  
+  // Add surface features to help grip the rope (small bumps in a spiral pattern)
+  const bumpRadius = 0.006; // Small bumps
+  const spiralTurns = 6;    // More turns for better coverage
+  
+  for (let i = 0; i < 32; i++) {
+    // Create a spiral pattern along the length of the cylinder
+    const angle = (i / 32) * Math.PI * 2 * spiralTurns;
+    const zPos = ((i / 32) * coilerHeight) - (coilerHeight / 2);
+    
+    const x = coilerRadius * 0.97 * Math.cos(angle);
+    const y = coilerRadius * 0.97 * Math.sin(angle);
+    
+    // Add small bump shape
+    const bumpShape = new Sphere(bumpRadius);
+    coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
+  }
+  
   coilerBody.position.set(0.57, 0.0, 0.025);
-  coilerBody.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBody);
 
-  /* COILER MESHES
+  // Visual representation (optional, can be commented out if not needed)
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -532,15 +581,13 @@ function createCoiler() {
   const wireMat = new THREE.MeshBasicMaterial({
     color: 0x00ff00,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.2,
     wireframe: true,
   });
 
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
   coilerBodyMesh.position.set(0.57, 0.0, 0.025);
   scene.add(coilerBodyMesh);
-  */
-
 }
 
 let coilerBodySide1 = null;
@@ -615,42 +662,145 @@ function createCoilerSides() {
   */
 };
 
+// Add a function to apply rotation forces to the rope based on coiler motion
+function applyRotationForceToRope() {
+  if (!coilerBody || !isPlaying) return;
+  
+  const coilerPos = coilerBody.position;
+  
+  // Apply rotation-based force at specific frequency
+  if (!window.forceCounter) window.forceCounter = 0;
+  window.forceCounter = (window.forceCounter + 1) % 3;
+  if (window.forceCounter !== 0) return;
+  
+  // The coiler is rotating at this speed
+  const rotationSpeed = -2.8;
+  
+  // Apply tangential forces to rope segments near the coiler
+  ropeBodies.forEach((segment) => {
+    if (!segment) return;
+    
+    const dx = segment.position.x - coilerPos.x;
+    const dy = segment.position.y - coilerPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Only apply force to segments near the coiler
+    if (distance <= coilerRadius * 1.5) {
+      // Calculate tangential force direction
+      const angle = Math.atan2(dy, dx);
+      const tangentX = -Math.sin(angle) * Math.abs(rotationSpeed);
+      const tangentY = Math.cos(angle) * Math.abs(rotationSpeed);
+      
+      // Force is stronger closer to the surface (simulating friction)
+      const contactFactor = Math.max(0, 1.0 - (distance / (coilerRadius * 1.5)));
+      const frictionStrength = 0.007; // Lower for gentler effect
+      
+      segment.applyForce(
+        new Vec3(
+          tangentX * frictionStrength * contactFactor, 
+          tangentY * frictionStrength * contactFactor, 
+          0
+        ), 
+        segment.position
+      );
+      
+      // Apply light damping to segments touching the coiler
+      if (distance <= coilerRadius * 1.05) {
+        segment.velocity.scale(0.98);
+        segment.angularVelocity.scale(0.98);
+      }
+    }
+  });
+}
+
+// Improve the animate function to include the rotation force
 function animate() {
   requestAnimationFrame(animate);
-  world.step(1/300);
-
-  if (ropeBodies.length > 0) {
-    updateRopeCurve();
-    if (ropeMeshes.length > 0 && ropeMeshes[0]) {
-      const curve = new THREE.CatmullRomCurve3(ropePoints);
-      ropeMeshes[0].geometry.dispose();
-      ropeMeshes[0].geometry = new THREE.TubeGeometry(
-        curve, 
-        segmentCount * 2,
-        ropeRadius * 0.8,
-        8, 
-        false
-      )
-    } 
-  };
-
-  if (isPlaying && movingModel) {
-    movingModel.rotation.z += 0.019;
-  }
   
-  if (dummy) {
-    dummy.getWorldPosition(temp);
-    anchorEnd.position.x = temp.x;
-    anchorEnd.position.y = temp.y;
-    anchorEnd.position.z = temp.z;
-    anchorEnd.velocity.set(0, 0, 0);
-    anchorEnd.angularVelocity.set(0, 0, 0);
-  }
+  try {
+    // Use multiple substeps for more stable physics
+    const timeStep = 1/360;
+    const subSteps = 4;
+    
+    for (let i = 0; i < subSteps; i++) {
+      world.step(timeStep / subSteps);
+    }
 
-  if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
-    createRopeMesh();
+    // Apply rotation force to help rope coil properly
+    if (isPlaying) {
+      applyRotationForceToRope();
+      
+      // Set coiler rotation
+      const rotationSpeed = -2.8;
+      
+      if (coilerBody) {
+        coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      if (coilerBodySide1) {
+        coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      if (coilerBodySide2) {
+        coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      // Update visual rotation
+      if (coilerBodyMesh) {
+        coilerBodyMesh.rotation.z -= 0.016;
+      }
+      
+      if (coilerBodyMeshSide1) {
+        coilerBodyMeshSide1.rotation.z -= 0.016;
+      }
+      
+      if (coilerBodyMeshSide2) {
+        coilerBodyMeshSide2.rotation.z -= 0.016;
+      }
+      
+      if (movingModel) {
+        movingModel.rotation.z += 0.016;
+      }
+    }
+
+    // ...existing code for updating the rope mesh...
+
+    if (dummy) {
+      dummy.getWorldPosition(temp);
+      
+      // Apply position changes gradually for smoother movement
+      if (anchorEnd) {
+        anchorEnd.position.x = anchorEnd.position.x * 0.2 + temp.x * 0.8;
+        anchorEnd.position.y = anchorEnd.position.y * 0.2 + temp.y * 0.8;
+        anchorEnd.position.z = anchorEnd.position.z * 0.2 + temp.z * 0.8;
+        anchorEnd.velocity.set(0, 0, 0);
+        anchorEnd.angularVelocity.set(0, 0, 0);
+      }
+    }
+
+    if (ropeBodies.length > 0) {
+      updateRopeCurve();
+      if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+        const curve = new THREE.CatmullRomCurve3(ropePoints);
+        ropeMeshes[0].geometry.dispose();
+        ropeMeshes[0].geometry = new THREE.TubeGeometry(
+          curve, 
+          Math.min(ropeBodies.length * 3, 120), // Improved resolution with a cap
+          ropeRadius * 0.8,
+          12, // Higher detail for smoother appearance
+          false
+        );
+      }
+    }
+
+    if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
+      createRopeMesh();
+    }
+    
+    controls.update();
+    renderer.render(scene, camera);
+  } catch (err) {
+    console.error("Error in animation loop:", err);
   }
-  controls.update();
-  renderer.render(scene, camera);
 }
 animate();
