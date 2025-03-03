@@ -87,4 +87,4 @@ Future plans include:
 
 ## License
 
-Copyright © 2023 Taymer International. All rights reserved.
+Copyright © 2025 Taymer International. All rights reserved.
