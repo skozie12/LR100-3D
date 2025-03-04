@@ -190,6 +190,7 @@ let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 let activeCoilerType = "100-10";
 
+// Modify onDropdownChange function to reset rope on coiler change and check components
 function onDropdownChange() {
   const reelValue = reelSelect.value;
   const counterValue = counterSelect.value;
@@ -202,8 +203,11 @@ function onDropdownChange() {
     if (reelValue) {
       loadCombo(reelValue, (model) => {
         reelModel = model;
+        checkAndCreateRope(); // Check if we can create rope after model loads
       });
       loadSpoolFromMovingAssets();
+    } else {
+      resetRope(); // Reset rope if reel is unselected
     }
   }
 
@@ -213,7 +217,10 @@ function onDropdownChange() {
     if (counterValue) {
       loadCombo(counterValue, (model) => {
         counterModel = model;
+        checkAndCreateRope(); // Check if we can create rope after model loads
       });
+    } else {
+      resetRope(); // Reset rope if counter is unselected
     }
   }
 
@@ -222,6 +229,9 @@ function onDropdownChange() {
     standModel = null;
     disposeModel(movingModel);
     movingModel = null;
+    
+    // Always reset the rope when coiler changes
+    resetRope();
     
     // Set active coiler type based on the selection
     if (coilerValue === '100-10.gltf') {
@@ -236,9 +246,11 @@ function onDropdownChange() {
     
     createCoiler();
     createCoilerSides();
+    
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
+        checkAndCreateRope(); // Check after stand model loads
       });
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
@@ -247,11 +259,14 @@ function onDropdownChange() {
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
+        checkAndCreateRope(); // Check after moving model loads
       });
     }
+    // ...similar changes for other coiler types...
     else if (coilerValue === '100-99.gltf') {
       loadCombo('100-99-STAND.gltf', (model) => {
         standModel = model;
+        checkAndCreateRope();
       });
       loadCombo('100-99-MOVING.gltf', (model) => {
         movingModel = model;
@@ -260,11 +275,13 @@ function onDropdownChange() {
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
+        checkAndCreateRope();
       });
     }
     else if (coilerValue === '100-200.gltf') {
       loadCombo('100-200-STAND.gltf', (model) => {
         standModel = model;
+        checkAndCreateRope();
       });
       loadCombo('100-200-MOVING.gltf', (model) => {
         movingModel = model;
@@ -273,14 +290,19 @@ function onDropdownChange() {
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
+        checkAndCreateRope();
       });
     }
     else if (coilerValue) {
       loadCombo(coilerValue, (model) => {
-        standModel = model; 
+        standModel = model;
+        checkAndCreateRope();
       });
+    } else {
+      resetRope(); // Reset rope if coiler is unselected
     }
   }
+  
   if (cutterValue !== oldCutterValue) {
     disposeModel(cutterModel);
     cutterModel = null;
@@ -295,6 +317,7 @@ function onDropdownChange() {
   oldCounterValue = counterValue;
   oldCoilerValue = coilerValue;
   oldCutterValue = cutterValue;
+  
   if (coilerValue) {
     playBtn.style.visibility = 'visible';
     pauseBtn.style.visibility = 'visible';
@@ -302,7 +325,76 @@ function onDropdownChange() {
     playBtn.style.visibility = 'hidden';
     pauseBtn.style.visibility = 'hidden';
   }
+  
   updatePrice();
+  checkAndCreateRope(); // Final check after all changes
+}
+
+// Add checkAndCreateRope function to check if all components are selected
+function checkAndCreateRope() {
+  if (completeConfig()) {
+    // If all required components are selected and no rope exists, create it
+    if (ropeBodies.length === 0) {
+      console.log("Creating rope - all components selected");
+      createRopeSegments();
+    }
+  } else {
+    // If components are missing, ensure rope is reset
+    if (ropeBodies.length > 0) {
+      console.log("Removing rope - not all components selected");
+      resetRope();
+    }
+  }
+}
+
+// Add createRopeSegments function to create rope only when needed
+function createRopeSegments() {
+  // Remove any existing rope first (for safety)
+  resetRope();
+  
+  // Create rope physics bodies
+  for (let i = 0; i < segmentCount; i++) {
+    const sphereShape = new Sphere(segmentWidth / 2);
+    const segmentBody = new Body({ 
+      mass: segmentMass, 
+      shape: sphereShape, 
+      position: new Vec3(0, 3 - i * segmentDistance, 0), 
+      material: defaultMaterial,
+      collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
+      collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
+    });
+    segmentBody.angularDamping = 0.95;
+    segmentBody.linearDamping = 0.95;
+    
+    world.addBody(segmentBody);
+    ropeBodies.push(segmentBody);
+  }
+
+  // Create constraints between segments
+  for (let i = 0; i < segmentCount - 1; i++) {
+    const bodyA = ropeBodies[i];
+    const bodyB = ropeBodies[i + 1];  
+    const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 3e6);
+    world.addConstraint(constraint);
+  }
+
+  // Position the rope appropriately
+  const endOfRope = ropeBodies[segmentCount - 1];
+  
+  // Position the start anchor near the spool
+  anchorStart.position.set(-0.55, -0.06, 0.035);
+  
+  // Create constraints to anchors
+  const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
+  world.addConstraint(anchorConstraint);
+
+  const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
+  world.addConstraint(anchorStartConstraint);
+
+  const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
+  world.addConstraint(anchorEndConstraint);
+  
+  console.log("Rope segments created successfully");
 }
 
 const reelSelect = document.getElementById('reelStandSelect');
@@ -490,6 +582,9 @@ function createRopeMesh(){
   }
 }
 
+// IMPORTANT: Comment out the existing initial rope creation code (lines ~440-470)
+// This code block should be removed or commented out:
+/*
 for (let i = 0; i < segmentCount; i++) {
   const sphereShape = new Sphere(segmentWidth / 2);
   const segmentBody = new Body({ 
@@ -517,6 +612,24 @@ for (let i = 0; i < segmentCount - 1; i++) {
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
 
+// ... also comment out or remove constraint creation code ...
+*/
+
+// Also comment out or remove these constraints:
+/*
+const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
+world.addConstraint(anchorConstraint);
+
+const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
+world.addConstraint(anchorStartConstraint);
+
+const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
+world.addConstraint(anchorEndConstraint);
+*/
+
+const endOfRope = ropeBodies[segmentCount - 1];
+const midRope = 10;
+
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.0, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
@@ -529,15 +642,6 @@ world.addBody(anchorStart);
 const anchor = new Body({ mass: 0 });
 anchor.position.set(0, 0.075, 0.03);
 world.addBody(anchor);
-
-const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
-world.addConstraint(anchorConstraint);
-
-const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
-world.addConstraint(anchorStartConstraint);
-
-const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
-world.addConstraint(anchorEndConstraint);
 
 const ropeMeshes = [];
 
@@ -630,6 +734,44 @@ let coilerBodySide1 = null;
 let coilerBodyMeshSide1 = null;
 let coilerBodySide2 = null;
 let coilerBodyMeshSide2 = null;
+
+function completeConfig(){
+  return reelSelect.value && counterSelect.value && coilerSelect.value;
+};
+
+function resetRope(){
+  for (let i = world.constraints.length -1; i >= 0; i--) {
+    if (world.constraints[i] instanceof DistanceConstraint) {
+      world.removeConstraint(world.constraints[i]);
+    }
+  }
+  for (let i = 0; i < ropeBodies.length; i++){
+    world.removeBody(ropeBodies[i])
+  }
+  ropeBodies.length = 0;
+  ropePoints.length = 0;
+
+  if (ropeMeshes.length > 0) {
+    ropeMeshes.forEach(mesh => {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    ropeMeshes.length = 0;
+  }
+
+  window.addedSegments = 0;
+  window.currentDirection = 1;
+  window.currentZ = 0;
+
+  if (segmentTimer) {
+    clearInterval(segmentTimer);
+    segmentTimer = null;
+  }
+
+  isPlaying = false;
+  isPaused = false;
+}
 
 function createCoiler() {
   if (coilerBody) {
@@ -954,3 +1096,8 @@ function animate() {
   }
 }
 animate();
+
+// Check if we should create rope after initial load
+setTimeout(() => {
+  checkAndCreateRope();
+}, 1000);
