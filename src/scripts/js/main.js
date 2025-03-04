@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
+import { uv } from 'three/tsl';
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -153,6 +154,7 @@ let oldCounterValue = '';
 let oldCoilerValue = '';
 let oldCutterValue = '';
 
+// Update coiler configuration with improved side disk spacing
 const COILER_CONFIG = {
   "100-10": {
     radius: 0.2,
@@ -163,20 +165,22 @@ const COILER_CONFIG = {
     sideOffset2: -0.07
   },
   "100-99": {
-    radius: 0.16,   
+    radius: 0.16,
     height: 0.15,
-    color: 0x0088ff, 
+    color: 0x0088ff,
     zOffset: 0.025,
-    sideOffset1: 0.10,
-    sideOffset2: -0.06
+    // Adjusted side offsets to be closer together proportionally to the coiler size
+    sideOffset1: 0.09,     // Reduced from 0.10
+    sideOffset2: -0.05     // Changed from -0.06
   },
   "100-200": {
-    radius: 0.12,    
+    radius: 0.12,
     height: 0.13,
-    color: 0xff5500, 
+    color: 0xff5500,
     zOffset: 0.025,
-    sideOffset1: 0.08,
-    sideOffset2: -0.04
+    // Adjusted side offsets to be closer together proportionally to the coiler size
+    sideOffset1: 0.07,     // Reduced from 0.08
+    sideOffset2: -0.03     // Changed from -0.04
   }
 };
 
@@ -418,17 +422,72 @@ function createRopeMesh(){
     false
   );
 
+  const textureLoader = new THREE.TextureLoader();
+  
+  const colourMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Color.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+    texture.anisotropy = render.capabilities.getMaxAnisotropy();
+  });
+
+  const normalMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  const roughnessMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Roughness.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  const metalnessMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Metalness.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
+    texture.repeat.set(8, 1);
+  });
+
+  const displacementMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Displacement.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  tubeGeometry.computeBoundingBox();
+  const boundingBox = tubeGeometry.boundingBox;
+  const size = new THREE.Vector3();
+  boundingBox.getSize(size);
+  const uvAttribute = tubeGeometry.attributes.uv;
+  for (let i = 0; i < uvAttribute.count; i++) {
+    let u = uvAttribute.getX(i);
+    let v = uvAttribute.getY(i);
+    uvAttribute.set(i, u * size.length() * 0.5);
+  }
+  uvAttribute.needsUpdate = true;
+
   const ropeMaterial = new THREE.MeshStandardMaterial({
-    map: new THREE.TextureLoader().load('./src/assets(moving)/Rope002.png'),
-    normalScale: new THREE.Vector2(1, 1),
+    map: colourMap,
+    normalMap: normalMap,
+    roughnessMap: roughnessMap,
+    displacementMap: displacementMap,
+    metalnessMap: metalnessMap,
+    displacementScale: 0.001,
+    normalScale: new THREE.Vector2(0.8, 0.8),
     roughness: 0.7,
     metalness: 0.2,
-    side: THREE.DoubleSide
+    side: THREE.DoubleSide,
+    envMapIntensity: 0.5
   });
 
   const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
+  tubeMesh.castShadow = true;
+  tubeMesh.recieveShadow = true;
   scene.add(tubeMesh);
   ropeMeshes.push(tubeMesh);
+  if (!renderer.shadowMap.enabled) {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+  }
 }
 
 for (let i = 0; i < segmentCount; i++) {
@@ -508,9 +567,18 @@ function addRopeSegment(){
       window.currentDirection *= -1;
     }
     
-    // Scale Z movement based on current coiler height
-    window.currentZ += window.currentDirection * (coilerHeight / 60) * 0.9;
-    const maxZ = coilerHeight * 0.4;
+    // Get the current coiler configuration
+    const config = COILER_CONFIG[activeCoilerType];
+    
+    // Calculate safe Z range based on barrier positions
+    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8; // 80% of distance between barriers
+    
+    // Scale Z movement based on current coiler barriers
+    window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
+    const maxZ = zRange * 0.45;
+    const midZ = (config.sideOffset1 + config.sideOffset2) / 2; // Center point between barriers
+    
+    // Keep Z position within the safe range between barriers
     window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
     
     const newBody = new Body({ 
@@ -624,6 +692,7 @@ function createCoiler() {
   scene.add(coilerBodyMesh);
 }
 
+// Enhance createCoilerSides to create appropriately sized sides
 function createCoilerSides() {
   if (coilerBodySide1) {
     world.removeBody(coilerBodySide1);
@@ -651,7 +720,17 @@ function createCoilerSides() {
   const config = COILER_CONFIG[activeCoilerType];
   
   // Scale side disk size to match the coiler radius
-  const cylinderShapeSide = new Cylinder(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16);
+  // For smaller coilers, make the flange slightly larger relative to the radius
+  // to ensure good containment of the rope
+  const sideRadiusMultiplier = activeCoilerType === "100-10" ? 2.0 : 
+                               activeCoilerType === "100-99" ? 2.1 : 2.2;
+                               
+  const cylinderShapeSide = new Cylinder(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16
+  );
  
   coilerBodySide1 = new Body({ 
     mass: 0, 
@@ -673,9 +752,21 @@ function createCoilerSides() {
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
-  // Create visual meshes for sides (uncommented for visibility)
-  const cylinderGeoSide1 = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
-  const cylinderGeoSide2 = new THREE.CylinderGeometry(coilerRadius * 2, coilerRadius * 2, coilerHeight / 10, 16, 1);
+  // Create visual meshes for sides with adjusted radius multiplier
+  const cylinderGeoSide1 = new THREE.CylinderGeometry(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16, 
+    1
+  );
+  const cylinderGeoSide2 = new THREE.CylinderGeometry(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16, 
+    1
+  );
   cylinderGeoSide1.rotateX(Math.PI / 2);
   cylinderGeoSide2.rotateX(Math.PI / 2);
 
@@ -699,6 +790,7 @@ function applyRotationForceToRope() {
   if (!coilerBody || !isPlaying) return;
   
   const coilerPos = coilerBody.position;
+  const config = COILER_CONFIG[activeCoilerType];
   
   if (!window.forceCounter) window.forceCounter = 0;
   window.forceCounter = (window.forceCounter + 1) % 3;
@@ -714,6 +806,7 @@ function applyRotationForceToRope() {
     
     const dx = segment.position.x - coilerPos.x;
     const dy = segment.position.y - coilerPos.y;
+    const dz = segment.position.z - coilerPos.z;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
     // Scale force application distance based on coiler radius
@@ -737,6 +830,16 @@ function applyRotationForceToRope() {
       if (distance <= coilerRadius * 1.05) {
         segment.velocity.scale(0.98);
         segment.angularVelocity.scale(0.98);
+      }
+      
+      // Add a small force to keep segments within the barriers if they're getting too close
+      const midZ = (config.sideOffset1 + config.sideOffset2) / 2; // Center point
+      const maxZDistance = (config.sideOffset1 - config.sideOffset2) * 0.45; // 90% of half-distance
+      
+      if (Math.abs(segment.position.z - midZ) > maxZDistance) {
+        // If getting too close to a barrier, push it back toward the center
+        const zForce = (midZ - segment.position.z) * 0.001;
+        segment.applyForce(new Vec3(0, 0, zForce), segment.position);
       }
     }
   });
@@ -822,7 +925,6 @@ function animate() {
     if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
       createRopeMesh();
     }
-    
     controls.update();
     renderer.render(scene, camera);
   } catch (err) {
