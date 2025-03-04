@@ -203,6 +203,7 @@ function onDropdownChange() {
       loadCombo(reelValue, (model) => {
         reelModel = model;
       });
+      loadSpoolFromMovingAssets();
     }
   }
 
@@ -235,7 +236,6 @@ function onDropdownChange() {
     
     createCoiler();
     createCoilerSides();
-    
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
@@ -384,7 +384,7 @@ world.defaultMaterial = defaultMaterial;
 
 const segmentCount = 40;
 const segmentWidth = 0.012;
-const segmentMass = 0.15;
+const segmentMass = 1;
 const segmentDistance = 0.01;
 
 const ropeBodies = [];
@@ -416,7 +416,7 @@ function createRopeMesh(){
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 24,
+    segmentCount * 32,
     ropeRadius * 0.8,
     32, 
     false
@@ -427,7 +427,7 @@ function createRopeMesh(){
   const colourMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Color.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
-    texture.anisotropy = render.capabilities.getMaxAnisotropy();
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   });
 
   const normalMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
@@ -715,13 +715,7 @@ function createCoilerSides() {
     coilerBodyMeshSide2.material.dispose();
     coilerBodyMeshSide2 = null;
   }
-
-  // Get configuration for active coiler type
   const config = COILER_CONFIG[activeCoilerType];
-  
-  // Scale side disk size to match the coiler radius
-  // For smaller coilers, make the flange slightly larger relative to the radius
-  // to ensure good containment of the rope
   const sideRadiusMultiplier = activeCoilerType === "100-10" ? 2.0 : 
                                activeCoilerType === "100-99" ? 2.1 : 2.2;
                                
@@ -786,6 +780,21 @@ function createCoilerSides() {
   scene.add(coilerBodyMeshSide2);
 }
 
+// Add a function to load the spool model from the assets(moving) directory
+function loadSpoolFromMovingAssets() {
+  let spoolModel = null;
+  loader.load(
+    `./src/assets(moving)/284-SPOOL.gltf`,
+    (gltf) => {
+      spoolModel = gltf.scene;
+      spoolModel.position.set(-0.55, -0.06, 0.035);
+      spoolModel.scale.set(11, 11, 11);
+      scene.add(spoolModel);
+    },
+  );
+  return spoolModel;
+}
+
 function applyRotationForceToRope() {
   if (!coilerBody || !isPlaying) return;
   
@@ -793,7 +802,7 @@ function applyRotationForceToRope() {
   const config = COILER_CONFIG[activeCoilerType];
   
   if (!window.forceCounter) window.forceCounter = 0;
-  window.forceCounter = (window.forceCounter + 1) % 3;
+  window.forceCounter = (window.forceCounter + 1) % 2;
   if (window.forceCounter !== 0) return;
   
   // Scale rotation speed based on coiler size - smaller coilers rotate faster
@@ -911,17 +920,30 @@ function animate() {
       updateRopeCurve();
       if (ropeMeshes.length > 0 && ropeMeshes[0]) {
         const curve = new THREE.CatmullRomCurve3(ropePoints);
+        const oldmaterial = ropeMeshes[0].material;
         ropeMeshes[0].geometry.dispose();
-        ropeMeshes[0].geometry = new THREE.TubeGeometry(
-          curve, 
+
+        const tubeGeometry = new THREE.TubeGeometry(
+          curve,
           Math.min(ropeBodies.length * 3, 120),
           ropeRadius * 0.8,
           12,
           false
         );
+
+        tubeGeometry.computeBoundingBox();
+        const boundingBox = tubeGeometry.boundingBox;
+        const size = new THREE.Vector3();
+        boundingBox.getSize(size);
+        const uvAttribute = tubeGeometry.attributes.uv;
+        for (let i = 0; i < uvAttribute.count; i++){
+          let u = uvAttribute.getX(i);
+          uvAttribute.set(i, u * size.length() * 0.5);
+        }
+        uvAttribute.needsUpdate = true;
+        ropeMeshes[0].geometry = tubeGeometry;
       }
     }
-
     if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
       createRopeMesh();
     }
