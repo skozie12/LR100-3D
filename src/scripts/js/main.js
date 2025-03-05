@@ -141,6 +141,7 @@ function loadCombo(fileName, onLoad) {
       const model = gltf.scene;
       model.rotation.y = Math.PI;
       model.position.x = 0.57;
+      model.position.y = 0.01; // Changed from 0.1 to 0.01
       scene.add(model);
       if (onLoad) onLoad(model);
     },
@@ -582,56 +583,11 @@ function createRopeMesh(){
   }
 }
 
-// IMPORTANT: Comment out the existing initial rope creation code (lines ~440-470)
-// This code block should be removed or commented out:
-/*
-for (let i = 0; i < segmentCount; i++) {
-  const sphereShape = new Sphere(segmentWidth / 2);
-  const segmentBody = new Body({ 
-    mass: segmentMass, 
-    shape: sphereShape, 
-    position: new Vec3(0, 3 - i * segmentDistance, 0), 
-    material: defaultMaterial,
-    collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
-    collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
-  });
-  segmentBody.angularDamping = 0.95;
-  segmentBody.linearDamping = 0.95;
-  
-  world.addBody(segmentBody);
-  ropeBodies.push(segmentBody);
-}
-
-for (let i = 0; i < segmentCount - 1; i++) {
-  const bodyA = ropeBodies[i];
-  const bodyB = ropeBodies[i + 1];  
-  const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 3e6);
-  world.addConstraint(constraint);
-}
-
-const endOfRope = ropeBodies[segmentCount - 1];
-const midRope = 10;
-
-// ... also comment out or remove constraint creation code ...
-*/
-
-// Also comment out or remove these constraints:
-/*
-const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
-world.addConstraint(anchorConstraint);
-
-const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
-world.addConstraint(anchorStartConstraint);
-
-const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
-world.addConstraint(anchorEndConstraint);
-*/
-
 const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
 
 const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.57, 0.0, 0.025);
+anchorEnd.position.set(0.57, 0.01, 0.025); // Changed from 0.1 to 0.01;
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
 
@@ -815,7 +771,7 @@ function createCoiler() {
     coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
   
-  coilerBody.position.set(0.57, 0.0, config.zOffset);
+  coilerBody.position.set(0.57, 0.01, config.zOffset); // Changed from 0.1 to 0.01
   world.addBody(coilerBody);
 
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
@@ -830,7 +786,7 @@ function createCoiler() {
   });
 
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
-  coilerBodyMesh.position.set(0.57, 0.0, config.zOffset);
+  coilerBodyMesh.position.set(0.57, 0.01, config.zOffset); // Changed from 0.1 to 0.01
   scene.add(coilerBodyMesh);
 }
 
@@ -874,7 +830,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide1.position.set(0.57, 0.0, config.sideOffset1); 
+  coilerBodySide1.position.set(0.57, 0.01, config.sideOffset1); // Changed from 0.1 to 0.01
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
 
@@ -884,7 +840,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide2.position.set(0.57, 0.0, config.sideOffset2); 
+  coilerBodySide2.position.set(0.57, 0.01, config.sideOffset2); // Changed from 0.1 to 0.01
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
@@ -914,11 +870,11 @@ function createCoilerSides() {
   });
 
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
-  coilerBodyMeshSide1.position.set(0.57, 0.0, config.sideOffset1);
+  coilerBodyMeshSide1.position.set(0.57, 0.01, config.sideOffset1); // Changed from 0.1 to 0.01
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
-  coilerBodyMeshSide2.position.set(0.57, 0.0, config.sideOffset2);
+  coilerBodyMeshSide2.position.set(0.57, 0.01, config.sideOffset2); // Changed from 0.1 to 0.01
   scene.add(coilerBodyMeshSide2);
 }
 
