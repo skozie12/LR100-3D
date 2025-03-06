@@ -191,6 +191,10 @@ function onDropdownChange() {
   if (reelValue !== oldReelValue) {
     disposeModel(reelModel);
     reelModel = null;
+    if (spoolModel) {
+      disposeModel(spoolModel);
+      spoolModel = null;
+    }
     if (reelValue) {
       loadCombo(reelValue, (model) => {
         reelModel = model;
@@ -850,8 +854,13 @@ function createCoilerSides() {
   scene.add(coilerBodyMeshSide2);
 }
 
+let spoolModel = null;
+
 function loadSpoolFromMovingAssets() {
-  let spoolModel = null;
+  if (spoolModel) {
+    disposeModel(spoolModel);
+    spoolModel = null;
+  }
   loader.load(
     `./assets/284-SPOOL.gltf`,
     (gltf) => {
@@ -861,7 +870,6 @@ function loadSpoolFromMovingAssets() {
       scene.add(spoolModel);
     },
   );
-  return spoolModel;
 }
 
 function applyRotationForceToRope() {
