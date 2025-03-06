@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/jpeg" href="./assets/taymer_small_logo.jpeg"/>
+  <title>LR100 Configuration Tool</title>
+  <style>
+    /* Add inline style to fix button width */
+    .add-to-cart {
+      width: 120px; /* Set fixed width */
+      min-width: 120px; /* Ensure minimum width */
+      box-sizing: border-box; /* Include padding in width calculation */
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-D0mv39mq.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DjZjDNRo.css">
+</head>
+<body>
+
+  <div id="top-bar">
+    <img id="header-logo" src="./assets/taymer_logo.png" alt="My Logo">
+
+    <label for="coilerSelect">Coiler:</label>
+    <select id="coilerSelect">
+      <option value="">-- Select Coiler --</option>
+      <option value="100-10.gltf" id="100-10">Collapsible 16″ I.D. Coiler</option>
+      <option value="100-99.gltf" id="100-99">Collapsible 12″ I.D. Coiler</option>
+      <option value="100-200.gltf" id="100-200">Collapsible 8″ I.D. Coiler</option>
+    </select>
+
+    <label for="cutterSelect">Cutter:</label>
+    <select id="cutterSelect" disabled>
+      <option value="">-- Select Counter --</option>
+      <option value="1410C.gltf" id="100-C">Cutting Blade</option>
+      <option value="1410.gltf">None</option>
+    </select>
+    <label for="reelStandSelect">Reel Stand:</label>
+    <select id="reelStandSelect">
+      <option value="">-- Select Reel Stand --</option>
+      <option value="LR100-284.gltf" id="100-284">Wind-off Reel Stand</option>
+      <option value="LR100-418.gltf" id="100-418">Spool Winder - 18" High</option>
+      <option value="">None</option>
+    </select>
+
+    <label for="counterSelect">Counter:</label>
+    <select id="counterSelect">
+      <option value="">-- Select Counter --</option>
+      <option value="1410.gltf" id="1410">Footage Counter (1410)</option>
+      <option value="1410.gltf" id="1420">Metric Counter (1420)</option>
+      <option value="1410.gltf" id="1410UR">Footage Counter with UR Wheels</option>
+      <option value="1410.gltf" id="1420UR">Metric Counter with UR Wheels</option>
+    </select>
+
+    <button class="add-to-cart" id="addBtn">Add to cart</button>
+
+    <div id="price-display"></div>
+  </div>
+  <div id="canvas-container">
+    <div id="canvas-overlay">
+      <p>Click and Drag to Rotate</p>
+    </div>
+    <button class="play-animation" id="playBtn">▶</button>
+    <button class="pause-animation" id="pauseBtn">||</button>
+    <canvas id="lr100-canvas"></canvas>
+    
+  </div>
+</body>
+</html>

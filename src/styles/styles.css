@@ -15,6 +15,9 @@
       font-size: 16px;
       font-family: 'roboto', sans-serif;
       cursor: pointer;
+      width: 120px; /* Set fixed width */
+      min-width: 120px; /* Ensure minimum width */
+      box-sizing: border-box; /* Include padding in width calculation */
      
     }
     .add-to-cart:hover {
@@ -47,7 +50,7 @@
       margin-left: auto;
       font-family: 'roboto', sans-serif;
       font-weight: bold;
-      font-size: 1.2rem;
+      font-size: 1rem;
     }
     #canvas-container {
       width: 100%;

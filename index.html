@@ -2,14 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/jpeg" href="./src/assets(moving)/taymer_small_logo.jpeg"/>
+  <link rel="icon" type="image/jpeg" href="./assets/taymer_small_logo.jpeg"/>
   <title>LR100 Configuration Tool</title>
   <link rel="stylesheet" href="./src/styles/styles.css">
+  <style>
+    /* Add inline style to fix button width */
+    .add-to-cart {
+      width: 120px; /* Set fixed width */
+      min-width: 120px; /* Ensure minimum width */
+      box-sizing: border-box; /* Include padding in width calculation */
+    }
+  </style>
 </head>
 <body>
 
   <div id="top-bar">
-    <img id="header-logo" src="./src/assets(moving)/taymer_logo.png" alt="My Logo">
+    <img id="header-logo" src="./assets/taymer_logo.png" alt="My Logo">
 
     <label for="coilerSelect">Coiler:</label>
     <select id="coilerSelect">

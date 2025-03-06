@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
-import { uv } from 'three/tsl';
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -40,7 +39,7 @@ window.addEventListener('resize', () => {
 
 function createLogoFloor() {
   const textureLoader = new THREE.TextureLoader();
-  const logoTexture = textureLoader.load('./src/assets/taymer_logo.png');
+  const logoTexture = textureLoader.load('./assets/taymer_logo.png');
   const topMaterial = new THREE.MeshPhongMaterial({ map: logoTexture, transparent: true });
   const brownMaterial = new THREE.MeshPhongMaterial({ color: 0xD2B48C });
   const legMaterial = new THREE.MeshPhongMaterial({ color: 0xEDCAA1 });
@@ -131,7 +130,7 @@ function disposeModel(model) {
 function loadCombo(fileName, onLoad) {
   if (!fileName) return;
   loader.load(
-    `./src/assets/${fileName}`,
+    `./assets/${fileName}`,
     (gltf) => {
       const model = gltf.scene;
       model.rotation.y = Math.PI;
@@ -497,28 +496,28 @@ function createRopeMesh(){
 
   const textureLoader = new THREE.TextureLoader();
   
-  const colourMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Color.jpg', function(texture) {
+  const colourMap = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   });
 
-  const normalMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
+  const normalMap = textureLoader.load('./src/assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
 
-  const roughnessMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Roughness.jpg', function(texture) {
+  const roughnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Roughness.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
 
-  const metalnessMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Metalness.jpg', function(texture) {
+  const metalnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Metalness.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
     texture.repeat.set(8, 1);
   });
 
-  const displacementMap = textureLoader.load('./src/assets(moving)/Rope002_1K-JPG_Displacement.jpg', function(texture) {
+  const displacementMap = textureLoader.load('./assets/Rope002_1K-JPG_Displacement.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
@@ -854,7 +853,7 @@ function createCoilerSides() {
 function loadSpoolFromMovingAssets() {
   let spoolModel = null;
   loader.load(
-    `./src/assets(moving)/284-SPOOL.gltf`,
+    `./assets/284-SPOOL.gltf`,
     (gltf) => {
       spoolModel = gltf.scene;
       spoolModel.position.set(-0.55, -0.06, 0.035);
