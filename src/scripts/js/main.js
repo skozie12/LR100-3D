@@ -8,12 +8,7 @@ const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
 
-const camera = new THREE.PerspectiveCamera(
-  75,
-  canvas.clientWidth / canvas.clientHeight,
-  0.1,
-  1000
-);
+const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
 camera.position.set(0, 1, 5);
 camera.zoom = 5;
 camera.updateProjectionMatrix();
@@ -141,7 +136,7 @@ function loadCombo(fileName, onLoad) {
       const model = gltf.scene;
       model.rotation.y = Math.PI;
       model.position.x = 0.57;
-      model.position.y = 0.01; // Changed from 0.1 to 0.01
+      model.position.y = 0.01;
       scene.add(model);
       if (onLoad) onLoad(model);
     },
@@ -155,7 +150,6 @@ let oldCounterValue = '';
 let oldCoilerValue = '';
 let oldCutterValue = '';
 
-// Update coiler configuration with improved side disk spacing
 const COILER_CONFIG = {
   "100-10": {
     radius: 0.2,
@@ -170,18 +164,16 @@ const COILER_CONFIG = {
     height: 0.15,
     color: 0x0088ff,
     zOffset: 0.025,
-    // Adjusted side offsets to be closer together proportionally to the coiler size
-    sideOffset1: 0.09,     // Reduced from 0.10
-    sideOffset2: -0.05     // Changed from -0.06
+    sideOffset1: 0.09,
+    sideOffset2: -0.05
   },
   "100-200": {
     radius: 0.12,
     height: 0.13,
     color: 0xff5500,
     zOffset: 0.025,
-    // Adjusted side offsets to be closer together proportionally to the coiler size
-    sideOffset1: 0.07,     // Reduced from 0.08
-    sideOffset2: -0.03     // Changed from -0.04
+    sideOffset1: 0.07,
+    sideOffset2: -0.03
   }
 };
 
@@ -191,7 +183,6 @@ let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 let activeCoilerType = "100-10";
 
-// Modify onDropdownChange function to reset rope on coiler change and check components
 function onDropdownChange() {
   const reelValue = reelSelect.value;
   const counterValue = counterSelect.value;
@@ -204,11 +195,11 @@ function onDropdownChange() {
     if (reelValue) {
       loadCombo(reelValue, (model) => {
         reelModel = model;
-        checkAndCreateRope(); // Check if we can create rope after model loads
+        checkAndCreateRope();
       });
       loadSpoolFromMovingAssets();
     } else {
-      resetRope(); // Reset rope if reel is unselected
+      resetRope();
     }
   }
 
@@ -218,10 +209,10 @@ function onDropdownChange() {
     if (counterValue) {
       loadCombo(counterValue, (model) => {
         counterModel = model;
-        checkAndCreateRope(); // Check if we can create rope after model loads
+        checkAndCreateRope();
       });
     } else {
-      resetRope(); // Reset rope if counter is unselected
+      resetRope();
     }
   }
 
@@ -231,10 +222,8 @@ function onDropdownChange() {
     disposeModel(movingModel);
     movingModel = null;
     
-    // Always reset the rope when coiler changes
     resetRope();
     
-    // Set active coiler type based on the selection
     if (coilerValue === '100-10.gltf') {
       activeCoilerType = "100-10";
     }
@@ -251,7 +240,7 @@ function onDropdownChange() {
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
-        checkAndCreateRope(); // Check after stand model loads
+        checkAndCreateRope();
       });
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
@@ -260,10 +249,9 @@ function onDropdownChange() {
         movingModel.add(dummy);
         createCoiler();
         createCoilerSides();
-        checkAndCreateRope(); // Check after moving model loads
+        checkAndCreateRope();
       });
     }
-    // ...similar changes for other coiler types...
     else if (coilerValue === '100-99.gltf') {
       loadCombo('100-99-STAND.gltf', (model) => {
         standModel = model;
@@ -300,7 +288,7 @@ function onDropdownChange() {
         checkAndCreateRope();
       });
     } else {
-      resetRope(); // Reset rope if coiler is unselected
+      resetRope();
     }
   }
   
@@ -328,19 +316,16 @@ function onDropdownChange() {
   }
   
   updatePrice();
-  checkAndCreateRope(); // Final check after all changes
+  checkAndCreateRope();
 }
 
-// Add checkAndCreateRope function to check if all components are selected
 function checkAndCreateRope() {
   if (completeConfig()) {
-    // If all required components are selected and no rope exists, create it
     if (ropeBodies.length === 0) {
       console.log("Creating rope - all components selected");
       createRopeSegments();
     }
   } else {
-    // If components are missing, ensure rope is reset
     if (ropeBodies.length > 0) {
       console.log("Removing rope - not all components selected");
       resetRope();
@@ -348,12 +333,9 @@ function checkAndCreateRope() {
   }
 }
 
-// Add createRopeSegments function to create rope only when needed
 function createRopeSegments() {
-  // Remove any existing rope first (for safety)
   resetRope();
   
-  // Create rope physics bodies
   for (let i = 0; i < segmentCount; i++) {
     const sphereShape = new Sphere(segmentWidth / 2);
     const segmentBody = new Body({ 
@@ -371,21 +353,19 @@ function createRopeSegments() {
     ropeBodies.push(segmentBody);
   }
 
-  // Create constraints between segments
   for (let i = 0; i < segmentCount - 1; i++) {
     const bodyA = ropeBodies[i];
     const bodyB = ropeBodies[i + 1];  
-    const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 3e6);
+    const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 1e5);
+    constraint.collideConnected = true;
+    constraint.maxForce = 1e3;
     world.addConstraint(constraint);
   }
 
-  // Position the rope appropriately
   const endOfRope = ropeBodies[segmentCount - 1];
   
-  // Position the start anchor near the spool
   anchorStart.position.set(-0.55, -0.06, 0.035);
   
-  // Create constraints to anchors
   const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
   world.addConstraint(anchorConstraint);
 
@@ -466,19 +446,19 @@ const COLLISION_GROUPS = {
 };
 
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
-  friction: 0.7,
-  restitution: 0.05,
-  contactEquationStiffness: 1e6,
-  contactEquationRelaxation: 4,
-  frictionEquationStiffness: 1e6,
-  frictionEquationRelaxation: 4
+  friction: 0.5,
+  restitution: 0.01,
+  contactEquationStiffness: 5e5,
+  contactEquationRelaxation: 5,
+  frictionEquationStiffness: 5e5,
+  frictionEquationRelaxation: 5
 });
 world.defaultMaterial = defaultMaterial;
 
 const segmentCount = 40;
 const segmentWidth = 0.012;
-const segmentMass = 1;
-const segmentDistance = 0.01;
+const segmentMass = 0.5;
+const segmentDistance = 0.012;
 
 const ropeBodies = [];
 const ropePoints = [];
@@ -587,7 +567,7 @@ const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
 
 const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.57, 0.01, 0.025); // Changed from 0.1 to 0.01;
+anchorEnd.position.set(0.57, 0.01, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
 
@@ -603,8 +583,7 @@ const ropeMeshes = [];
 
 function addRopeSegment(){
   try {
-    if (ropeBodies.length >= 500) return;
-    
+    if (ropeBodies.length >= 200) return;
     if (ropeBodies.length < 11) return;
     
     const prevBody = ropeBodies[10]; 
@@ -627,18 +606,11 @@ function addRopeSegment(){
       window.currentDirection *= -1;
     }
     
-    // Get the current coiler configuration
     const config = COILER_CONFIG[activeCoilerType];
-    
-    // Calculate safe Z range based on barrier positions
-    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8; // 80% of distance between barriers
-    
-    // Scale Z movement based on current coiler barriers
+    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8;
     window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
     const maxZ = zRange * 0.45;
-    const midZ = (config.sideOffset1 + config.sideOffset2) / 2; // Center point between barriers
-    
-    // Keep Z position within the safe range between barriers
+    const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
     window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
     
     const newBody = new Body({ 
@@ -674,8 +646,12 @@ function addRopeSegment(){
     world.addBody(newBody);
     ropeBodies.splice(11, 0, newBody); 
     
-    const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 3e6);
-    const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 3e6);
+    const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
+    const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
+    constraintPrev.collideConnected = true;
+    constraintNext.collideConnected = true;
+    constraintPrev.maxForce = 1e3;
+    constraintNext.maxForce = 1e3;
     world.addConstraint(constraintPrev);
     world.addConstraint(constraintNext);
   } catch (err) {
@@ -693,7 +669,7 @@ let coilerBodyMeshSide2 = null;
 
 function completeConfig(){
   return reelSelect.value && counterSelect.value && coilerSelect.value;
-};
+}
 
 function resetRope(){
   for (let i = world.constraints.length -1; i >= 0; i--) {
@@ -741,7 +717,6 @@ function createCoiler() {
     coilerBodyMesh = null;
   }
   
-  // Get configuration for active coiler type
   const config = COILER_CONFIG[activeCoilerType];
   coilerRadius = config.radius;
   coilerHeight = config.height;
@@ -757,7 +732,7 @@ function createCoiler() {
   const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
   coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
   
-  const bumpRadius = coilerRadius * 0.03; // Scale bumps with coiler size
+  const bumpRadius = coilerRadius * 0.03;
   const spiralTurns = 6;
   
   for (let i = 0; i < 32; i++) {
@@ -771,7 +746,7 @@ function createCoiler() {
     coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
   
-  coilerBody.position.set(0.57, 0.01, config.zOffset); // Changed from 0.1 to 0.01
+  coilerBody.position.set(0.57, 0.01, config.zOffset);
   world.addBody(coilerBody);
 
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
@@ -786,11 +761,10 @@ function createCoiler() {
   });
 
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
-  coilerBodyMesh.position.set(0.57, 0.01, config.zOffset); // Changed from 0.1 to 0.01
+  coilerBodyMesh.position.set(0.57, 0.01, config.zOffset);
   scene.add(coilerBodyMesh);
 }
 
-// Enhance createCoilerSides to create appropriately sized sides
 function createCoilerSides() {
   if (coilerBodySide1) {
     world.removeBody(coilerBodySide1);
@@ -830,7 +804,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide1.position.set(0.57, 0.01, config.sideOffset1); // Changed from 0.1 to 0.01
+  coilerBodySide1.position.set(0.57, 0.01, config.sideOffset1);
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
 
@@ -840,11 +814,10 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide2.position.set(0.57, 0.01, config.sideOffset2); // Changed from 0.1 to 0.01
+  coilerBodySide2.position.set(0.57, 0.01, config.sideOffset2);
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
-  // Create visual meshes for sides with adjusted radius multiplier
   const cylinderGeoSide1 = new THREE.CylinderGeometry(
     coilerRadius * sideRadiusMultiplier, 
     coilerRadius * sideRadiusMultiplier, 
@@ -870,15 +843,14 @@ function createCoilerSides() {
   });
 
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
-  coilerBodyMeshSide1.position.set(0.57, 0.01, config.sideOffset1); // Changed from 0.1 to 0.01
+  coilerBodyMeshSide1.position.set(0.57, 0.01, config.sideOffset1);
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
-  coilerBodyMeshSide2.position.set(0.57, 0.01, config.sideOffset2); // Changed from 0.1 to 0.01
+  coilerBodyMeshSide2.position.set(0.57, 0.01, config.sideOffset2);
   scene.add(coilerBodyMeshSide2);
 }
 
-// Add a function to load the spool model from the assets(moving) directory
 function loadSpoolFromMovingAssets() {
   let spoolModel = null;
   loader.load(
@@ -903,10 +875,9 @@ function applyRotationForceToRope() {
   window.forceCounter = (window.forceCounter + 1) % 2;
   if (window.forceCounter !== 0) return;
   
-  // Scale rotation speed based on coiler size - smaller coilers rotate faster
   const baseRotationSpeed = -2.8;
-  const sizeRatio = 0.2 / coilerRadius; // 0.2 is the original coiler radius
-  const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5); // Cap at 1.5x speed
+  const sizeRatio = 0.2 / coilerRadius;
+  const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
   
   ropeBodies.forEach((segment) => {
     if (!segment) return;
@@ -916,7 +887,6 @@ function applyRotationForceToRope() {
     const dz = segment.position.z - coilerPos.z;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Scale force application distance based on coiler radius
     if (distance <= coilerRadius * 1.5) {
       const angle = Math.atan2(dy, dx);
       const tangentX = -Math.sin(angle) * Math.abs(rotationSpeed);
@@ -939,12 +909,10 @@ function applyRotationForceToRope() {
         segment.angularVelocity.scale(0.98);
       }
       
-      // Add a small force to keep segments within the barriers if they're getting too close
-      const midZ = (config.sideOffset1 + config.sideOffset2) / 2; // Center point
-      const maxZDistance = (config.sideOffset1 - config.sideOffset2) * 0.45; // 90% of half-distance
+      const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
+      const maxZDistance = (config.sideOffset1 - config.sideOffset2) * 0.45;
       
       if (Math.abs(segment.position.z - midZ) > maxZDistance) {
-        // If getting too close to a barrier, push it back toward the center
         const zForce = (midZ - segment.position.z) * 0.001;
         segment.applyForce(new Vec3(0, 0, zForce), segment.position);
       }
@@ -956,8 +924,8 @@ function animate() {
   requestAnimationFrame(animate);
   
   try {
-    const timeStep = 1/360;
-    const subSteps = 4;
+    const timeStep = 1/480;
+    const subSteps = 8;
     
     for (let i = 0; i < subSteps; i++) {
       world.step(timeStep / subSteps);
@@ -966,7 +934,6 @@ function animate() {
     if (isPlaying) {
       applyRotationForceToRope();
       
-      // Scale rotation speed based on coiler size
       const baseRotationSpeed = -2.8;
       const sizeRatio = 0.2 / coilerRadius;
       const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
@@ -1053,7 +1020,6 @@ function animate() {
 }
 animate();
 
-// Check if we should create rope after initial load
 setTimeout(() => {
   checkAndCreateRope();
 }, 1000);
