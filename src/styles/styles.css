@@ -161,3 +161,26 @@ select {
   border-bottom: 1px solid #ddd;
   padding-bottom: 8px;
 }
+
+/* Update footer text styles */
+.footer-text {
+  position: absolute;
+  bottom: 10px;
+  font-size: 12px;
+  color: rgba(100, 100, 100, 0.7);
+  font-family: 'roboto', sans-serif;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.footer-left {
+  left: 10px;
+  max-width: 500px;
+  text-align: left;
+  font-size: 12px; /* Half the size of the standard footer text */
+}
+
+.footer-right {
+  right: 10px;
+  text-align: right;
+}
