@@ -11,13 +11,140 @@
       width: 120px; /* Set fixed width */
       min-width: 120px; /* Ensure minimum width */
       box-sizing: border-box; /* Include padding in width calculation */
+      margin: 10px auto; /* Center horizontally */
+      display: block; /* Allow margin auto to work */
+    }
+    
+    /* New layout styles for floating menu and full screen canvas */
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+    
+    body {
+      position: relative;
+    }
+    
+    /* Floating panel */
+    #top-bar {
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      width: 250px;
+      z-index: 10;
+      background-color: rgba(255, 255, 255, 0.85);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      /* Removed max-height and overflow-y properties */
+      text-align: center; /* Center all text content */
+    }
+    
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw; /* Full viewport width */
+      height: 100vh; /* Full viewport height */
+    }
+    
+    #lr100-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    
+    /* Play/Pause buttons - moved to top right */
+    .play-animation, .pause-animation {
+      position: absolute;
+      top: 20px; /* Moved from bottom to top */
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #f79520;quotes: ;
+      border: 2px solid #666;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    
+    .pause-animation {
+      right: 70px; /* Position next to play button */
+    }
+    
+    /* Other styles */
+    #top-bar label, #top-bar select {
+      margin: 0 auto 12px auto; /* Center horizontally */
+      width: 90%; /* Slightly less than 100% for better appearance */
+      display: block;
+      text-align: left; /* Left align label text */
+    }
+    
+    #price-display {
+      margin-top: 15px;
+      font-weight: bold;
+      padding: 8px 0;
+      text-align: center;
+    }
+    
+    #canvas-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: rgba(255, 255, 255, 0.5);
+      z-index: 5;
+    }
+    
+    /* Better styling for controls */
+    select {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background-color: white;
+    }
+    
+    button.add-to-cart:hover {
+      background-color: #ec6619;
+    }
+    
+    /* Title for the control panel */
+    .panel-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 15px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 8px;
     }
   </style>
 </head>
 <body>
-
+  <!-- Canvas container covering full viewport -->
+  <div id="canvas-container">
+    <div id="canvas-overlay">
+      <p>Click and Drag to Rotate</p>
+    </div>
+    <canvas id="lr100-canvas"></canvas>
+  </div>
+  
+  <!-- Floating control panel -->
   <div id="top-bar">
-    <img id="header-logo" src="./assets/taymer_logo.png" alt="My Logo">
+    <div class="panel-title">LR100 Configuration</div>
 
     <label for="coilerSelect">Coiler:</label>
     <select id="coilerSelect">
@@ -27,12 +154,6 @@
       <option value="100-200.gltf" id="100-200">Collapsible 8″ I.D. Coiler</option>
     </select>
 
-    <label for="cutterSelect">Cutter:</label>
-    <select id="cutterSelect" disabled>
-      <option value="">-- Select Counter --</option>
-      <option value="1410C.gltf" id="100-C">Cutting Blade</option>
-      <option value="1410.gltf">None</option>
-    </select>
     <label for="reelStandSelect">Reel Stand:</label>
     <select id="reelStandSelect">
       <option value="">-- Select Reel Stand --</option>
@@ -50,19 +171,21 @@
       <option value="1410.gltf" id="1420UR">Metric Counter with UR Wheels</option>
     </select>
 
-    <button class="add-to-cart" id="addBtn">Add to cart</button>
+    <label for="cutterSelect">Cutter:</label>
+    <select id="cutterSelect" disabled>
+      <option value="">-- Select Counter --</option>
+      <option value="1410C.gltf" id="100-C">Cutting Blade</option>
+      <option value="1410.gltf">None</option>
+    </select>
 
+    <button class="add-to-cart" id="addBtn">Add to cart</button>
     <div id="price-display"></div>
   </div>
-  <div id="canvas-container">
-    <div id="canvas-overlay">
-      <p>Click and Drag to Rotate</p>
-    </div>
-    <button class="play-animation" id="playBtn">▶</button>
-    <button class="pause-animation" id="pauseBtn">||</button>
-    <canvas id="lr100-canvas"></canvas>
-    
-  </div>
+  
+  <!-- Play/pause buttons moved outside of canvas container to ensure proper stacking -->
+  <button class="play-animation" id="playBtn">▶</button>
+  <button class="pause-animation" id="pauseBtn">||</button>
+  
   <script type="module" src="./src/scripts/js/main.js"></script>
 </body>
 </html>

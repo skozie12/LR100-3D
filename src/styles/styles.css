@@ -9,7 +9,7 @@
     }
     .add-to-cart {
       color: white;
-      background-color: #f28c28;
+      background-color: #f79520;
       padding: 15px 20px;
       border: None;
       font-size: 16px;
@@ -88,7 +88,7 @@
       visibility: hidden;
       position: absolute;
       top: 1%;
-      left: 1%;
+      right: 1%;
       background: #f36100;
       color: white;
       font-size: 1.2rem;
@@ -104,7 +104,7 @@
       visibility: hidden;
       position: absolute;
       top: 1%;
-      left: 4.5%;
+      right: 4.5%;
       background: #f36100;
       color: white;
       font-size: 1.2rem;
