@@ -3,137 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/jpeg" href="./assets/taymer_small_logo.jpeg"/>
-  <title>LR100 Configuration Tool</title>
-
-  <style>
-    /* Add inline style to fix button width */
-    .add-to-cart {
-      width: 120px; /* Set fixed width */
-      min-width: 120px; /* Ensure minimum width */
-      box-sizing: border-box; /* Include padding in width calculation */
-      margin: 10px auto; /* Center horizontally */
-      display: block; /* Allow margin auto to work */
-    }
-    
-    /* New layout styles for floating menu and full screen canvas */
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      width: 100%;
-      height: 100%;
-    }
-    
-    body {
-      position: relative;
-    }
-    
-    /* Floating panel */
-    #top-bar {
-      position: absolute;
-      left: 20px;
-      top: 20px;
-      width: 250px;
-      z-index: 10;
-      background-color: rgba(255, 255, 255, 0.85);
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-      display: flex;
-      flex-direction: column;
-      box-sizing: border-box;
-      /* Removed max-height and overflow-y properties */
-      text-align: center; /* Center all text content */
-    }
-    
-    #canvas-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw; /* Full viewport width */
-      height: 100vh; /* Full viewport height */
-    }
-    
-    #lr100-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    
-    /* Play/Pause buttons - moved to top right */
-    .play-animation, .pause-animation {
-      position: absolute;
-      top: 20px; /* Moved from bottom to top */
-      right: 20px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: #f79520;
-      border: 2px solid #666;
-      font-size: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    }
-    
-    .pause-animation {
-      right: 70px; /* Position next to play button */
-    }
-    
-    /* Other styles */
-    #top-bar label, #top-bar select {
-      margin: 0 auto 12px auto; /* Center horizontally */
-      width: 90%; /* Slightly less than 100% for better appearance */
-      display: block;
-      text-align: left; /* Left align label text */
-    }
-    
-    #price-display {
-      margin-top: 15px;
-      font-weight: bold;
-      padding: 8px 0;
-      text-align: center;
-    }
-    
-    #canvas-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: rgba(255, 255, 255, 0.5);
-      z-index: 5;
-    }
-    
-    /* Better styling for controls */
-    select {
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      background-color: white;
-    }
-    
-    button.add-to-cart:hover {
-      background-color: #ec6619;
-    }
-    
-    /* Title for the control panel */
-    .panel-title {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 15px;
-      text-align: center;
-      border-bottom: 1px solid #ddd;
-      padding-bottom: 8px;
-    }
-  </style>
-  <script type="module" crossorigin src="/assets/index-Biw-nGXu.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BbldCpUy.css">
+  <title>LR100 Configuration Tool</title>
+  <script type="module" crossorigin src="/assets/index-BXvY9ZFu.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DVrQnMw0.css">
 </head>
 <body>
   <!-- Canvas container covering full viewport -->
@@ -160,8 +32,8 @@
     <select id="reelStandSelect">
       <option value="">-- Select Reel Stand --</option>
       <option value="LR100-284.gltf" id="100-284">Wind-off Reel Stand</option>
-      <option value="" id="100-418">Spool Winder - 18" High</option>
-      <option value="">None</option>
+      <!-- <option value="" id="100-418">Spool Winder - 18" High</option> -->
+      <!-- <option value="">None</option> -->
     </select>
 
     <label for="counterSelect">Counter:</label>
@@ -184,10 +56,18 @@
     <div id="price-display"></div>
   </div>
   
-  <!-- Play/pause buttons moved outside of canvas container to ensure proper stacking -->
+  <!-- Play/pause buttons -->
   <button class="play-animation" id="playBtn">▶</button>
   <button class="pause-animation" id="pauseBtn">||</button>
   
-
+  <!-- Footer text -->
+  <div class="footer-text footer-left">
+    Note: LR100-284 does not include a spool, colours are subject to change
+  </div>
+  
+  <div class="footer-text footer-right">
+    © 2025 Taymer International, Inc. All rights reserved.
+  </div>
+  
 </body>
 </html>
