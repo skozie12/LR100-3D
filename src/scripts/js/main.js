@@ -28,7 +28,7 @@ controls.enablePan = false;
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(0, 10, 10);
+dirLight.position.set(0, 5, 3);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
@@ -376,6 +376,18 @@ function onDropdownChange() {
     }
   }
 
+  if (coilerValue) {
+    playBtn.style.visibility = 'visible';
+    pauseBtn.style.visibility = 'visible';
+  } else {
+    playBtn.style.visibility = 'hidden';
+    pauseBtn.style.visibility = 'hidden';
+
+    if (isPlaying) {
+      isPlaying = false;
+    }
+  }
+
   oldReelValue = reelValue;
   oldCounterValue = counterValue;
   oldCoilerValue = coilerValue;
@@ -448,8 +460,6 @@ function createRopeSegments() {
 
   const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
   world.addConstraint(anchorEndConstraint);
-  
-  console.log("Rope segments created successfully");
 }
 
 const reelSelect = document.getElementById('reelStandSelect');

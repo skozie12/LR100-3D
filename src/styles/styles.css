@@ -64,7 +64,7 @@ body {
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  visibility: visible; /* Changed from hidden */
+  visibility: hidden;
   color: white;
   z-index: 10;
 }
@@ -144,7 +144,7 @@ select {
 }
 
 #canvas-overlay p {
-  color: black;
+  color: rgb(129, 127, 127);
   font-size: 2rem;
   font-family: 'roboto', sans-serif;
   text-align: center;
