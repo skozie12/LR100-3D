@@ -40,6 +40,8 @@ window.addEventListener('resize', () => {
   renderer.setSize(width, height);
 });
 
+
+
 function createLogoFloor() {
   const textureLoader = new THREE.TextureLoader();
   const logoTexture = textureLoader.load('./assets/taymer_logo.png');
@@ -952,6 +954,41 @@ function loadSpoolFromMovingAssets() {
     },
   );
 }
+
+let benchModel = null;
+loader.load(
+  './assets/table.gltf',
+  (gltf) => {
+    benchModel = gltf.scene;
+    benchModel.position.set(-1.8, -0.6, -1.35);
+    benchModel.scale.set(0.4, 0.4, 0.4);
+    benchModel.rotation.y = (Math.PI / 2);
+    scene.add(benchModel);
+  }
+);
+let benchModel2 = null;
+loader.load(
+  './assets/table.gltf',
+  (gltf) => {
+    benchModel2 = gltf.scene;
+    benchModel2.position.set(-1, -0.6, -1.8);
+    benchModel2.scale.set(0.4, 0.4, 0.4);
+    scene.add(benchModel2);
+  }
+);
+let toolbox = null;
+loader.load(
+  './assets/toolbox.gltf',
+  (gltf) => {
+    toolbox = gltf.scene;
+    toolbox.position.set(1.6, -0.69, -1.8);
+    toolbox.scale.set(0.4, 0.4, 0.4);
+    scene.add(toolbox);
+  }
+);
+
+
+
 
 function applyRotationForceToRope() {
   if (!coilerBody || !isPlaying) return;
