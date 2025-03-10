@@ -987,6 +987,19 @@ loader.load(
   }
 );
 
+let model1410 = null;
+loader.load(
+  './assets/100-10-STAND.gltf',
+  (gltf) => {
+    model1410 = gltf.scene;
+    model1410.position.set(-0.5, -0.83, -1.71);
+    model1410.rotation.x = (Math.PI / 2);
+    model1410.rotation.z = (Math.PI / 2.5);
+    model1410.rotation.y = (Math.PI / 1.02);
+    scene.add(model1410);
+  }
+);
+
 
 
 
