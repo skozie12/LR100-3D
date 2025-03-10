@@ -51,7 +51,7 @@ function createLogoFloor() {
   const materials = [brownMaterial, brownMaterial, topMaterial, brownMaterial, brownMaterial, brownMaterial];
 
   const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 2.5, 0.05), 
+    new THREE.BoxGeometry(4, 2.5, 0.06), 
     new THREE.MeshPhongMaterial({ color: 0xA9a9a9 })
   );
   floor.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
@@ -59,7 +59,7 @@ function createLogoFloor() {
   floor.position.z = -0.75
   floor.rotateX(-Math.PI / 2);
   scene.add(floor);
-  
+  /*
   const floor2 = new THREE.Mesh(
     new THREE.BoxGeometry(3.5, 1, 0.05), 
     topMaterial // Changed from MeshPhongMaterial to use the logo texture
@@ -69,9 +69,9 @@ function createLogoFloor() {
   floor2.position.y = 0.2
   scene.add(floor2);
 
-  const wall = new THREE.Mesh(
+ const wall = new THREE.Mesh(
     new THREE.BoxGeometry(4, 2, 0.05),
-    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+    new THREE.MeshPhongMaterial({ color: 0xeaeaea })
   );
   wall.receiveShadow = true;
   wall.position.z = -2.001; 
@@ -111,7 +111,7 @@ function createLogoFloor() {
   roof.position.z = -1.776
   roof.rotateX(Math.PI / 2);
   scene.add(roof);
-
+  */
   const boxGeometry = new THREE.BoxGeometry(2, 0.025, 0.5);
   const box = new THREE.Mesh(boxGeometry, materials);
   box.castShadow = true;
