@@ -21,6 +21,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
+controls.maxPolarAngle = Math.PI / 2;
 controls.minDistance = 1;
 controls.maxDistance = 10;
 controls.enablePan = false;
@@ -589,7 +590,7 @@ function createRopeMesh(){
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   });
 
-  const normalMap = textureLoader.load('./src/assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
+  const normalMap = textureLoader.load('./assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
