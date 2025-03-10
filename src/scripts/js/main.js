@@ -49,11 +49,12 @@ function createLogoFloor() {
   const materials = [brownMaterial, brownMaterial, topMaterial, brownMaterial, brownMaterial, brownMaterial];
 
   const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 4, 0.05), 
+    new THREE.BoxGeometry(4, 2.5, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xA9a9a9 })
   );
   floor.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
   floor.position.y = -0.77;
+  floor.position.z = -0.75
   floor.rotateX(-Math.PI / 2);
   scene.add(floor);
   
@@ -77,24 +78,37 @@ function createLogoFloor() {
   scene.add(wall);
 
   const floor3 = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 2, 0.05), 
+    new THREE.BoxGeometry(2, 2, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
   );
   floor3.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
   floor3.position.x = -2;
   floor3.position.y = 0.2;
+  floor3.position.z = -1.025
   floor3.rotateY(Math.PI / 2);
   scene.add(floor3);
 
   const floor4 = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 2, 0.05), 
+    new THREE.BoxGeometry(2, 2, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
   );
   floor4.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
   floor4.position.x = 2;
   floor4.position.y = 0.2;
+  floor4.position.z = -1.025
   floor4.rotateY(Math.PI / 2);
   scene.add(floor4);
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(4.05, 0.5, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  roof.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  roof.position.x = 0;
+  roof.position.y = 1.176;
+  roof.position.z = -1.776
+  roof.rotateX(Math.PI / 2);
+  scene.add(roof);
 
   const boxGeometry = new THREE.BoxGeometry(2, 0.025, 0.5);
   const box = new THREE.Mesh(boxGeometry, materials);
