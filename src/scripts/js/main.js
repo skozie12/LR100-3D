@@ -15,6 +15,8 @@ camera.updateProjectionMatrix();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -27,6 +29,7 @@ const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(0, 10, 10);
+dirLight.castShadow = true;
 scene.add(dirLight);
 
 window.addEventListener('resize', () => {
@@ -45,13 +48,65 @@ function createLogoFloor() {
   const legMaterial = new THREE.MeshPhongMaterial({ color: 0xEDCAA1 });
   const materials = [brownMaterial, brownMaterial, topMaterial, brownMaterial, brownMaterial, brownMaterial];
 
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 4, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xA9a9a9 })
+  );
+  floor.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor.position.y = -0.77;
+  floor.rotateX(-Math.PI / 2);
+  scene.add(floor);
+  
+  const floor2 = new THREE.Mesh(
+    new THREE.BoxGeometry(2.5, 1, 0.05), 
+    topMaterial // Changed from MeshPhongMaterial to use the logo texture
+  );
+  floor2.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor2.position.z = -2;
+  floor2.position.y = 0.2
+  scene.add(floor2);
+
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2, 0.05),
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  wall.receiveShadow = true;
+  wall.position.z = -2.001; 
+  wall.position.y = 0.2;
+  wall.position
+  scene.add(wall);
+
+  const floor3 = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  floor3.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor3.position.x = -2;
+  floor3.position.y = 0.2;
+  floor3.rotateY(Math.PI / 2);
+  scene.add(floor3);
+
+  const floor4 = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  floor4.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor4.position.x = 2;
+  floor4.position.y = 0.2;
+  floor4.rotateY(Math.PI / 2);
+  scene.add(floor4);
+
   const boxGeometry = new THREE.BoxGeometry(2, 0.025, 0.5);
   const box = new THREE.Mesh(boxGeometry, materials);
+  box.castShadow = true;
+  box.receiveShadow = true; // Add this
   box.position.y = -0.41;
   scene.add(box);
 
   const boxFix = new THREE.BoxGeometry(2, 0.022, 0.5);
   const box1 = new THREE.Mesh(boxFix, brownMaterial);
+  box1.castShadow = true; // Add this
+  box1.receiveShadow = true; // Add this
   box1.position.y = -0.41;
   scene.add(box1);
 
@@ -59,6 +114,8 @@ function createLogoFloor() {
   function makeLeg(x, z) {
     const leg = new THREE.Mesh(legGeo, legMaterial);
     leg.position.set(x, -0.59, z);
+    leg.castShadow = true; // Add this
+    leg.receiveShadow = true; // Add this
     scene.add(leg);
   }
   makeLeg(-0.95, -0.2);
