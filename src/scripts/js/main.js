@@ -58,7 +58,7 @@ function createLogoFloor() {
   scene.add(floor);
   
   const floor2 = new THREE.Mesh(
-    new THREE.BoxGeometry(2.5, 1, 0.05), 
+    new THREE.BoxGeometry(3.5, 1, 0.05), 
     topMaterial // Changed from MeshPhongMaterial to use the logo texture
   );
   floor2.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
