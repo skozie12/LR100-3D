@@ -28,7 +28,7 @@ controls.enablePan = false;
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(0, 5, 3);
+dirLight.position.set(0, 5, 4);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
@@ -81,7 +81,7 @@ function createLogoFloor() {
     new THREE.BoxGeometry(2, 2, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
   );
-  floor3.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor3.castShadow = true;
   floor3.position.x = -2;
   floor3.position.y = 0.2;
   floor3.position.z = -1.025
@@ -92,7 +92,7 @@ function createLogoFloor() {
     new THREE.BoxGeometry(2, 2, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
   );
-  floor4.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor4.castShadow = true;
   floor4.position.x = 2;
   floor4.position.y = 0.2;
   floor4.position.z = -1.025
@@ -103,7 +103,7 @@ function createLogoFloor() {
     new THREE.BoxGeometry(4.05, 0.5, 0.05), 
     new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
   );
-  roof.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  roof.recieveShadow = true;
   roof.position.x = 0;
   roof.position.y = 1.176;
   roof.position.z = -1.776
