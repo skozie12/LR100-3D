@@ -961,8 +961,8 @@ loader.load(
   './assets/table.gltf',
   (gltf) => {
     benchModel = gltf.scene;
-    benchModel.position.set(-1.8, -0.6, -1.35);
-    benchModel.scale.set(0.4, 0.4, 0.4);
+    benchModel.position.set(-1.8, -0.6, -1.235);
+    benchModel.scale.set(0.5, 0.5, 0.5);
     benchModel.rotation.y = (Math.PI / 2);
     scene.add(benchModel);
   }
@@ -972,8 +972,8 @@ loader.load(
   './assets/table.gltf',
   (gltf) => {
     benchModel2 = gltf.scene;
-    benchModel2.position.set(-1, -0.6, -1.8);
-    benchModel2.scale.set(0.4, 0.4, 0.4);
+    benchModel2.position.set(-1.15, -0.6, -1.8);
+    benchModel2.scale.set(0.5, 0.5, 0.5);
     scene.add(benchModel2);
   }
 );
@@ -982,8 +982,8 @@ loader.load(
   './assets/toolbox.gltf',
   (gltf) => {
     toolbox = gltf.scene;
-    toolbox.position.set(1.6, -0.69, -1.8);
-    toolbox.scale.set(0.4, 0.4, 0.4);
+    toolbox.position.set(1.5, -0.65, -1.8);
+    toolbox.scale.set(0.6, 0.6, 0.6);
     scene.add(toolbox);
   }
 );
@@ -993,13 +993,14 @@ loader.load(
   './assets/100-10-STAND.gltf',
   (gltf) => {
     model1410 = gltf.scene;
-    model1410.position.set(-0.5, -0.83, -1.71);
+    model1410.position.set(-0.5, -0.85, -1.71);
     model1410.rotation.x = (Math.PI / 2);
     model1410.rotation.z = (Math.PI / 2.5);
     model1410.rotation.y = (Math.PI / 1.02);
     scene.add(model1410);
   }
 );
+
 
 
 
