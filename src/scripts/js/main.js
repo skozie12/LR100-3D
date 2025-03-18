@@ -529,7 +529,8 @@ const defaultMaterial = new Material('defaultMaterial');
 const COLLISION_GROUPS = {
   COILER: 1,
   ROPE: 2,
-  ROPE_SEGMENT: 4
+  ROPE_SEGMENT: 4,
+  ANCHOR: 8
 };
 
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
@@ -731,12 +732,12 @@ function addRopeSegment(){
     newBody.linearDamping = 0.95;
     
     world.addBody(newBody);
-    ropeBodies.splice(11, 0, newBody); 
+    ropeBodies.push(newBody);
     
     const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
-    constraintPrev.collideConnected = true;
-    constraintNext.collideConnected = true;
+    constraintPrev.collideConnected = false;
+    constraintNext.collideConnected = false;
     constraintPrev.maxForce = 1e3;
     constraintNext.maxForce = 1e3;
     world.addConstraint(constraintPrev);
@@ -1001,10 +1002,7 @@ loader.load(
   }
 );
 
-
-
-
-function applyRotationForceToRope() {
+/*function applyRotationForceToRope() {
   if (!coilerBody || !isPlaying) return;
   
   const coilerPos = coilerBody.position;
@@ -1057,7 +1055,7 @@ function applyRotationForceToRope() {
       }
     }
   });
-}
+}*/
 
 function animate() {
   requestAnimationFrame(animate);
@@ -1082,11 +1080,20 @@ function animate() {
         coilerBody.angularVelocity.set(0, 0, 0);
         if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
         if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
-        for (let i = 0; i < ropeBodies.length; i++) {
-          ropeBodies[i].velocity.set(0, 0, 0);
-          ropeBodies[i].angularVelocity.set(0, 0, 0);
-          ropeBodies[i].type = BODY_TYPES.STATIC;
+        updateRopeCurve();
+        const finalRopePoints = [...ropePoints];
+        for (let i = world.constraints.length - 1; i >= 0; i--) {
+          if (world.constraints[i] instanceof DistanceConstraint) {
+        world.removeConstraint(world.constraints[i]);
+          }
         }
+        for (let i = 0; i < ropeBodies.length; i++) {
+          world.removeBody(ropeBodies[i]);
+        }
+        ropeBodies.length = 0;
+        const finalCurve = new THREE.CatmullRomCurve3(finalRopePoints);
+        ropePoints.length = 0;
+        ropePoints.push(...finalRopePoints);
       }
 
       if (coilerBody) {
@@ -1134,13 +1141,9 @@ function animate() {
         anchorEnd.position.x = temp.x;
         anchorEnd.position.y = temp.y;
         anchorEnd.position.z = temp.z;
-        
-        // Add these to ensure the anchor point is fixed:
         anchorEnd.velocity.set(0, 0, 0);
         anchorEnd.angularVelocity.set(0, 0, 0);
-        
-        // Add damping to the last few segments to reduce wiggling
-        const lastSegmentCount = 5;
+        const lastSegmentCount = 10;
         for (let i = Math.max(0, ropeBodies.length - lastSegmentCount); i < ropeBodies.length; i++) {
           ropeBodies[i].velocity.scale(0.9); // Add stronger damping
           ropeBodies[i].angularVelocity.scale(0.9);
