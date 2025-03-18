@@ -68,6 +68,19 @@
     © 2025 Taymer International, Inc. All rights reserved.
   </div>
   
+  <!-- Load Ammo.js with explicit WASM support -->
+  <script>
+    // Pre-configure Ammo to use wasm for better performance
+    var AmmoConfig = {
+      locateFile: function(path) {
+        if(path.endsWith('.wasm')) {
+          return 'https://cdn.jsdelivr.net/npm/ammo.js@0.0.2/builds/ammo.wasm';
+        }
+        return path;
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/ammo.js@0.0.2/builds/ammo.js"></script>
   <script type="module" src="./src/scripts/js/main.js"></script>
 </body>
 </html>
