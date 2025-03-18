@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-// Remove all cannon-es imports
+import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -41,6 +41,8 @@ window.addEventListener('resize', () => {
   renderer.setSize(width, height);
 });
 
+
+
 function createLogoFloor() {
   const textureLoader = new THREE.TextureLoader();
   const logoTexture = textureLoader.load('./assets/taymer_logo.png');
@@ -58,7 +60,59 @@ function createLogoFloor() {
   floor.position.z = -0.75
   floor.rotateX(-Math.PI / 2);
   scene.add(floor);
+  /*
+  const floor2 = new THREE.Mesh(
+    new THREE.BoxGeometry(3.5, 1, 0.05), 
+    topMaterial // Changed from MeshPhongMaterial to use the logo texture
+  );
+  floor2.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor2.position.z = -2;
+  floor2.position.y = 0.2
+  scene.add(floor2);
 
+ const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2, 0.05),
+    new THREE.MeshPhongMaterial({ color: 0xeaeaea })
+  );
+  wall.receiveShadow = true;
+  wall.position.z = -2.001; 
+  wall.position.y = 0.2;
+  wall.position
+  scene.add(wall);
+
+  const floor3 = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 2, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  floor3.castShadow = true;
+  floor3.position.x = -2;
+  floor3.position.y = 0.2;
+  floor3.position.z = -1.025
+  floor3.rotateY(Math.PI / 2);
+  scene.add(floor3);
+
+  const floor4 = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 2, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  floor4.castShadow = true;
+  floor4.position.x = 2;
+  floor4.position.y = 0.2;
+  floor4.position.z = -1.025
+  floor4.rotateY(Math.PI / 2);
+  scene.add(floor4);
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(4.05, 0.5, 0.05), 
+    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
+  );
+  roof.recieveShadow = true;
+  roof.position.x = 0;
+  roof.position.y = 1.176;
+  roof.position.z = -1.776
+  roof.rotateX(Math.PI / 2);
+  scene.add(roof);
+  */
   const boxGeometry = new THREE.BoxGeometry(2, 0.025, 0.5);
   const box = new THREE.Mesh(boxGeometry, materials);
   box.castShadow = true;
@@ -106,24 +160,6 @@ let segmentTimer = null;
 function onPlayClick() {
   if (!isPlaying) { 
     isPlaying = true;
-    console.log("Play clicked, animation starting");
-    
-    // Add an initial impulse to make movement more visible
-    if (ropeBodies.length > 10) {
-      try {
-        for (let i = 5; i < ropeBodies.length - 5; i += 2) {
-          const impulse = new AmmoLib.btVector3(
-            (Math.random() - 0.5) * 0.2,
-            (Math.random() - 0.5) * 0.2,
-            (Math.random() - 0.5) * 0.1
-          );
-          ropeBodies[i].applyCentralImpulse(impulse);
-        }
-      } catch (err) {
-        console.error("Error applying initial impulse:", err);
-      }
-    }
-    
     segmentTimer = setInterval(() => {
       if (isPlaying) {
         addRopeSegment();
@@ -386,6 +422,49 @@ function checkAndCreateRope() {
   }
 }
 
+function createRopeSegments() {
+  resetRope();
+  
+  for (let i = 0; i < segmentCount; i++) {
+    const sphereShape = new Sphere(segmentWidth / 2);
+    const segmentBody = new Body({ 
+      mass: segmentMass, 
+      shape: sphereShape, 
+      position: new Vec3(0, 3 - i * segmentDistance, 0), 
+      material: defaultMaterial,
+      collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
+      collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
+    });
+    segmentBody.angularDamping = 0.95;
+    segmentBody.linearDamping = 0.95;
+    
+    world.addBody(segmentBody);
+    ropeBodies.push(segmentBody);
+  }
+
+  for (let i = 0; i < segmentCount - 1; i++) {
+    const bodyA = ropeBodies[i];
+    const bodyB = ropeBodies[i + 1];  
+    const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 1e5);
+    constraint.collideConnected = true;
+    constraint.maxForce = 1e3;
+    world.addConstraint(constraint);
+  }
+
+  const endOfRope = ropeBodies[segmentCount - 1];
+  
+  anchorStart.position.set(-0.55, -0.06, 0.035);
+  
+  const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
+  world.addConstraint(anchorConstraint);
+
+  const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
+  world.addConstraint(anchorStartConstraint);
+
+  const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
+  world.addConstraint(anchorEndConstraint);
+}
+
 const reelSelect = document.getElementById('reelStandSelect');
 const counterSelect = document.getElementById('counterSelect');
 const coilerSelect = document.getElementById('coilerSelect');
@@ -442,841 +521,422 @@ function updatePrice() {
   }
 }
 
-// Define collision groups equivalent to cannon-es groups
+const world = new World({
+  gravity: new Vec3(0, -9.81, 0),
+});
+
+const defaultMaterial = new Material('defaultMaterial');
 const COLLISION_GROUPS = {
   COILER: 1,
   ROPE: 2,
   ROPE_SEGMENT: 4
 };
 
-// Declare variables before they are referenced
+world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
+  friction: 0.5,
+  restitution: 0.01,
+  contactEquationStiffness: 5e5,
+  contactEquationRelaxation: 5,
+  frictionEquationStiffness: 5e5,
+  frictionEquationRelaxation: 5
+});
+world.defaultMaterial = defaultMaterial;
+
 const segmentCount = 40;
 const segmentWidth = 0.012;
 const segmentMass = 0.5;
 const segmentDistance = 0.012;
+
+const ropeBodies = [];
+const ropePoints = [];
 const ropeRadius = segmentWidth / 2;
 
-// Initialize Ammo.js variables
-let physicsWorld;
-let tmpTrans;
-let ropeBodies = [];
-let ropePoints = [];
-let anchorEnd, anchorStart, anchor;
-let ammoReady = false;
-let constraints = [];
-let frameCount = 0; 
-let AmmoLib;
-const ropeMeshes = []; // Move this declaration to the top as well
+function updateRopeCurve() {
+  ropePoints.length = 0;
+  for (let i = 0; i < ropeBodies.length; i++) {
+    ropePoints.push(new THREE.Vector3(
+      ropeBodies[i].position.x,
+      ropeBodies[i].position.y,
+      ropeBodies[i].position.z
+    ));
+  }
+}
+
+function createRopeMesh(){
+  if (ropeMeshes.length > 0) {
+    ropeMeshes.forEach(mesh => {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    ropeMeshes.length = 0;
+  }
+
+  updateRopeCurve();
+  const curve = new THREE.CatmullRomCurve3(ropePoints); 
+  const tubeGeometry = new THREE.TubeGeometry(
+    curve, 
+    segmentCount * 32,
+    ropeRadius * 0.8,
+    32, 
+    false
+  );
+
+  const textureLoader = new THREE.TextureLoader();
+  
+  const colourMap = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  });
+
+  const normalMap = textureLoader.load('./assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  const roughnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Roughness.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  const metalnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Metalness.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
+    texture.repeat.set(8, 1);
+  });
+
+  const displacementMap = textureLoader.load('./assets/Rope002_1K-JPG_Displacement.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 1);
+  });
+
+  tubeGeometry.computeBoundingBox();
+  const boundingBox = tubeGeometry.boundingBox;
+  const size = new THREE.Vector3();
+  boundingBox.getSize(size);
+  const uvAttribute = tubeGeometry.attributes.uv;
+  for (let i = 0; i < uvAttribute.count; i++) {
+    let u = uvAttribute.getX(i);
+    let v = uvAttribute.getY(i);
+    uvAttribute.set(i, u * size.length() * 0.5);
+  }
+  uvAttribute.needsUpdate = true;
+
+  const ropeMaterial = new THREE.MeshStandardMaterial({
+    map: colourMap,
+    normalMap: normalMap,
+    roughnessMap: roughnessMap,
+    displacementMap: displacementMap,
+    metalnessMap: metalnessMap,
+    displacementScale: 0.001,
+    normalScale: new THREE.Vector2(0.8, 0.8),
+    roughness: 0.7,
+    metalness: 0.2,
+    side: THREE.DoubleSide,
+    envMapIntensity: 0.5
+  });
+
+  const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
+  tubeMesh.castShadow = true;
+  tubeMesh.recieveShadow = true;
+  scene.add(tubeMesh);
+  ropeMeshes.push(tubeMesh);
+  if (!renderer.shadowMap.enabled) {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+  }
+}
+
+const endOfRope = ropeBodies[segmentCount - 1];
+const midRope = 10;
+
+const anchorEnd = new Body({ mass: 0 });
+anchorEnd.position.set(0.57, 0.01, 0.025);
+anchorEnd.type = BODY_TYPES.KINEMATIC;
+world.addBody(anchorEnd);
+
+const anchorStart = new Body({ mass: 0 });
+anchorStart.position.set(-0.6, 0.07, 0.03);
+world.addBody(anchorStart);
+
+const anchor = new Body({ mass: 0 });
+anchor.position.set(0, 0.075, 0.03);
+world.addBody(anchor);
+
+const ropeMeshes = [];
+
+function addRopeSegment(){
+  try {
+    if (ropeBodies.length >= 300) return;
+    if (ropeBodies.length < 11) return;
+    
+    const prevBody = ropeBodies[10]; 
+    const nextBody = ropeBodies[11]; 
+    
+    world.constraints.forEach((constraint) => {
+      if ((constraint.bodyA === prevBody && constraint.bodyB === nextBody) ||
+          (constraint.bodyA === nextBody && constraint.bodyB === prevBody)) {
+        world.removeConstraint(constraint);
+      }
+    });
+
+    if (!window.addedSegments) window.addedSegments = 0;
+    window.addedSegments++;
+    
+    if (!window.currentDirection) window.currentDirection = 1;
+    if (!window.currentZ) window.currentZ = 0;
+    
+    if (window.addedSegments % 30 === 0) {
+      window.currentDirection *= -1;
+    }
+    
+    const config = COILER_CONFIG[activeCoilerType];
+    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8;
+    window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
+    const maxZ = zRange * 0.45;
+    const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
+    window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
+    
+    const newBody = new Body({ 
+      mass: segmentMass, 
+      shape: new Sphere(segmentWidth / 2), 
+      position: new Vec3(
+        prevBody.position.x,
+        prevBody.position.y,
+        prevBody.position.z
+      ),
+      material: defaultMaterial,
+      collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
+      collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
+    });
+    
+    if (coilerBody) {
+      const dx = coilerBody.position.x - prevBody.position.x;
+      const dy = coilerBody.position.y - prevBody.position.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist > 0.1) {
+        newBody.velocity.set(
+          dx * 0.02, 
+          dy * 0.02, 
+          0
+        );
+      }
+    }
+    
+    newBody.angularDamping = 0.95;
+    newBody.linearDamping = 0.95;
+    
+    world.addBody(newBody);
+    ropeBodies.splice(11, 0, newBody); 
+    
+    const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
+    const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
+    constraintPrev.collideConnected = true;
+    constraintNext.collideConnected = true;
+    constraintPrev.maxForce = 1e3;
+    constraintNext.maxForce = 1e3;
+    world.addConstraint(constraintPrev);
+    world.addConstraint(constraintNext);
+  } catch (err) {
+    console.error("Error in addRopeSegment:", err);
+  }
+}
+
+let dummy = null;
+const temp = new THREE.Vector3();
+
 let coilerBodySide1 = null;
 let coilerBodyMeshSide1 = null;
 let coilerBodySide2 = null;
 let coilerBodyMeshSide2 = null;
-let dummy = null;
-const temp = new THREE.Vector3();
 
-// Remove the manual script loading since we're loading it in HTML
-function preloadAmmo() {
-  console.log("Attempting to load Ammo.js");
-  
-  // Check if Ammo is already available (from the script tag)
-  if (typeof Ammo === 'function' || typeof Ammo !== 'undefined') {
-    console.log("Ammo is already available, initializing...");
-    if (typeof Ammo === 'function') {
-      Ammo().then(setupPhysics);
-    } else {
-      setupPhysics(Ammo);
-    }
-    return;
-  }
-  
-  // Try CDN as a last resort
-  const script = document.createElement('script');
-  script.src = 'https://cdn.jsdelivr.net/npm/ammo.js@0.0.2/builds/ammo.js';
-  
-  script.onload = () => {
-    console.log("Successfully loaded Ammo.js from CDN");
-    if (typeof Ammo === 'function') {
-      Ammo().then(setupPhysics);
-    } else if (typeof Ammo !== 'undefined') {
-      setupPhysics(Ammo);
-    }
-  };
-  
-  script.onerror = () => {
-    console.error("Failed to load Ammo.js");
-    alert("Failed to load physics engine. The simulation won't work properly.");
-  };
-  
-  document.head.appendChild(script);
+function completeConfig(){
+  return reelSelect.value && counterSelect.value && coilerSelect.value;
 }
 
-// Complete initialization sequence
-function setupPhysics(ammo) {
-  console.log("Setting up physics with Ammo.js");
-  AmmoLib = ammo;
-  window.AmmoLib = ammo;
-  
-  // Initialize physics world first
-  initializePhysics();
-  
-  // Then create anchors
-  createAnchors();
-  
-  // Mark physics as ready
-  ammoReady = true;
-  console.log("Physics setup complete!");
-  
-  // Attempt to create rope after a delay
-  setTimeout(() => {
-    checkAndCreateRope();
-    setTimeout(checkPhysicsState, 1000);
-  }, 500);
+function resetRope(){
+  for (let i = world.constraints.length -1; i >= 0; i--) {
+    if (world.constraints[i] instanceof DistanceConstraint) {
+      world.removeConstraint(world.constraints[i]);
+    }
+  }
+  for (let i = 0; i < ropeBodies.length; i++){
+    world.removeBody(ropeBodies[i])
+  }
+  ropeBodies.length = 0;
+  ropePoints.length = 0;
+
+  if (ropeMeshes.length > 0) {
+    ropeMeshes.forEach(mesh => {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    ropeMeshes.length = 0;
+  }
+
+  window.addedSegments = 0;
+  window.currentDirection = 1;
+  window.currentZ = 0;
+
+  if (segmentTimer) {
+    clearInterval(segmentTimer);
+    segmentTimer = null;
+  }
+
+  isPlaying = false;
+  isPaused = false;
 }
 
-// Create anchors function - This must be defined BEFORE initializePhysics calls it
-function createAnchors() {
-  if (!AmmoLib) {
-    console.error("AmmoLib not available in createAnchors");
-    return;
+function createCoiler() {
+  if (coilerBody) {
+    world.removeBody(coilerBody);
+    coilerBody = null;
+  }
+  if (coilerBodyMesh) {
+    scene.remove(coilerBodyMesh);
+    coilerBodyMesh.geometry.dispose();
+    coilerBodyMesh.material.dispose();
+    coilerBodyMesh = null;
   }
   
-  console.log("Creating anchor points");
-  try {
-    anchor = createStaticBody(new AmmoLib.btSphereShape(0.01), 0, 0.075, 0.03);
-    anchorStart = createStaticBody(new AmmoLib.btSphereShape(0.01), -0.6, 0.07, 0.03);
-    anchorEnd = createStaticBody(new AmmoLib.btSphereShape(0.01), 0.57, 0.01, 0.025);
-    console.log("Anchors created");
-  } catch (error) {
-    console.error("Error creating anchors:", error);
+  const config = COILER_CONFIG[activeCoilerType];
+  coilerRadius = config.radius;
+  coilerHeight = config.height;
+  
+  coilerBody = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    material: defaultMaterial,
+    collisionFilterGroup: COLLISION_GROUPS.COILER,
+    collisionFilterMask: COLLISION_GROUPS.ROPE
+  });
+  
+  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+  coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
+  
+  const bumpRadius = coilerRadius * 0.03;
+  const spiralTurns = 6;
+  
+  for (let i = 0; i < 32; i++) {
+    const angle = (i / 32) * Math.PI * 2 * spiralTurns;
+    const zPos = ((i / 32) * coilerHeight) - (coilerHeight / 2);
+    
+    const x = coilerRadius * 0.97 * Math.cos(angle);
+    const y = coilerRadius * 0.97 * Math.sin(angle);
+    
+    const bumpShape = new Sphere(bumpRadius);
+    coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
+  
+  coilerBody.position.set(0.57, 0.01, config.zOffset);
+  world.addBody(coilerBody);
+
+  const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
+  cylinderGeo.rotateZ(Math.PI / 2); 
+  cylinderGeo.rotateY(Math.PI / 2); 
+
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: config.color,
+    transparent: true,
+    opacity: 0.2,
+    wireframe: true,
+  });
+
+  coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
+  coilerBodyMesh.position.set(0.57, 0.01, config.zOffset);
+  scene.add(coilerBodyMesh);
 }
 
-function createStaticBody(shape, x, y, z) {
-  if (!AmmoLib || !physicsWorld) {
-    console.error("AmmoLib or physicsWorld not available in createStaticBody");
-    return null;
+function createCoilerSides() {
+  if (coilerBodySide1) {
+    world.removeBody(coilerBodySide1);
+    coilerBodySide1 = null;
   }
+  if (coilerBodySide2) {
+    world.removeBody(coilerBodySide2);
+    coilerBodySide2 = null;
+  }
+
+  if (coilerBodyMeshSide1) {
+    scene.remove(coilerBodyMeshSide1);
+    coilerBodyMeshSide1.geometry.dispose();
+    coilerBodyMeshSide1.material.dispose();
+    coilerBodyMeshSide1 = null;
+  }
+  if (coilerBodyMeshSide2) {
+    scene.remove(coilerBodyMeshSide2);
+    coilerBodyMeshSide2.geometry.dispose();
+    coilerBodyMeshSide2.material.dispose();
+    coilerBodyMeshSide2 = null;
+  }
+  const config = COILER_CONFIG[activeCoilerType];
+  const sideRadiusMultiplier = activeCoilerType === "100-10" ? 2.0 : 
+                               activeCoilerType === "100-99" ? 2.1 : 2.2;
+                               
+  const cylinderShapeSide = new Cylinder(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16
+  );
+ 
+  coilerBodySide1 = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    shape: cylinderShapeSide, 
+    material: defaultMaterial 
+  });
+  coilerBodySide1.position.set(0.57, 0.01, config.sideOffset1);
+  coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
+  world.addBody(coilerBodySide1);
+
+  coilerBodySide2 = new Body({ 
+    mass: 0, 
+    type: BODY_TYPES.KINEMATIC, 
+    shape: cylinderShapeSide, 
+    material: defaultMaterial 
+  });
+  coilerBodySide2.position.set(0.57, 0.01, config.sideOffset2);
+  coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
+  world.addBody(coilerBodySide2);
   
-  try {
-    const transform = new AmmoLib.btTransform();
-    transform.setIdentity();
-    transform.setOrigin(new AmmoLib.btVector3(x, y, z));
-    
-    const motionState = new AmmoLib.btDefaultMotionState(transform);
-    const localInertia = new AmmoLib.btVector3(0, 0, 0);
-    const rbInfo = new AmmoLib.btRigidBodyConstructionInfo(
-      0, motionState, shape, localInertia
-    );
-    
-    const body = new AmmoLib.btRigidBody(rbInfo);
-    body.setCollisionFlags(body.getCollisionFlags() | 2); // KINEMATIC_OBJECT
-    body.setActivationState(4); // DISABLE_DEACTIVATION
-    
-    physicsWorld.addRigidBody(body);
-    return body;
-  } catch (error) {
-    console.error("Error creating static body:", error);
-    return null;
-  }
+  const cylinderGeoSide1 = new THREE.CylinderGeometry(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16, 
+    1
+  );
+  const cylinderGeoSide2 = new THREE.CylinderGeometry(
+    coilerRadius * sideRadiusMultiplier, 
+    coilerRadius * sideRadiusMultiplier, 
+    coilerHeight / 10, 
+    16, 
+    1
+  );
+  cylinderGeoSide1.rotateX(Math.PI / 2);
+  cylinderGeoSide2.rotateX(Math.PI / 2);
+
+  const wireMatSide = new THREE.MeshBasicMaterial({
+    color: config.color,
+    transparent: true,
+    opacity: 0.2,
+    wireframe: true,
+  });
+
+  coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
+  coilerBodyMeshSide1.position.set(0.57, 0.01, config.sideOffset1);
+  scene.add(coilerBodyMeshSide1);
+  
+  coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
+  coilerBodyMeshSide2.position.set(0.57, 0.01, config.sideOffset2);
+  scene.add(coilerBodyMeshSide2);
 }
-
-// Initialize physics world with soft body support
-function initializePhysics() {
-  console.log("Initializing physics world with soft body support");
-  try {
-    if (!AmmoLib) {
-      console.error("AmmoLib not available");
-      return;
-    }
-    
-    // Create soft body physics world components
-    const collisionConfiguration = new AmmoLib.btSoftBodyRigidBodyCollisionConfiguration();
-    const dispatcher = new AmmoLib.btCollisionDispatcher(collisionConfiguration);
-    const broadphase = new AmmoLib.btDbvtBroadphase();
-    const solver = new AmmoLib.btSequentialImpulseConstraintSolver();
-    const softBodySolver = new AmmoLib.btDefaultSoftBodySolver();
-    
-    // Create soft-rigid dynamics world instead of discrete dynamics world
-    physicsWorld = new AmmoLib.btSoftRigidDynamicsWorld(
-      dispatcher, broadphase, solver, collisionConfiguration, softBodySolver
-    );
-    
-    // Set gravity
-    const gravity = new AmmoLib.btVector3(0, -20.0, 0);
-    physicsWorld.setGravity(gravity);
-    physicsWorld.getWorldInfo().set_m_gravity(gravity);
-    
-    tmpTrans = new AmmoLib.btTransform();
-    
-    console.log("Soft body physics world initialized");
-  } catch (error) {
-    console.error("Error initializing physics world:", error);
-  }
-}
-
-// Create a soft body rope using Ammo.js soft body helpers
-function createRopeSegments() {
-  if (!ammoReady || !AmmoLib || !physicsWorld) {
-    console.error("Physics not ready for rope creation");
-    return;
-  }
-  
-  console.log("Creating soft body rope");
-  resetRope();
-  
-  try {
-    // Define rope start and end points
-    const startPos = { x: -0.6, y: 0.07, z: 0.03 };
-    const endPos = { x: 0.57, y: 0.01, z: 0.025 };
-    
-    // Create soft body helpers
-    const softBodyHelpers = new AmmoLib.btSoftBodyHelpers();
-    
-    // Create rope between start and end points
-    const ropeStart = new AmmoLib.btVector3(startPos.x, startPos.y, startPos.z);
-    const ropeEnd = new AmmoLib.btVector3(endPos.x, endPos.y, endPos.z);
-    
-    // Create the rope with segmentCount - 1 internal segments (total points = segmentCount + 1)
-    const ropeSoftBody = softBodyHelpers.CreateRope(
-      physicsWorld.getWorldInfo(),
-      ropeStart, 
-      ropeEnd,
-      segmentCount - 1,  // internal segments
-      0                  // fixed ends flag
-    );
-    
-    // Configure the soft body for better animation
-    const sbConfig = ropeSoftBody.get_m_cfg();
-    sbConfig.set_viterations(10);    // Velocity constraint solver iterations
-    sbConfig.set_piterations(10);    // Position constraint solver iterations
-    sbConfig.set_kDP(0.005);         // Damping coefficient
-    sbConfig.set_kDF(0.2);           // Dynamic friction coefficient 
-    sbConfig.set_kSHR(1.0);          // Soft vs rigid hardness 
-    sbConfig.set_kCHR(1.0);          // Soft vs rigid collision hardness
-    
-    // Set total mass - lighter for more movement
-    ropeSoftBody.setTotalMass(1.0, false);
-    
-    // Set collision margin
-    const margin = 0.05;
-    AmmoLib.castObject(ropeSoftBody, AmmoLib.btCollisionObject).getCollisionShape().setMargin(margin);
-    
-    // Add the soft body to the world
-    physicsWorld.addSoftBody(ropeSoftBody, 1, -1);
-    
-    // Disable deactivation
-    ropeSoftBody.setActivationState(4);
-    
-    // Store the soft body for later reference
-    ropeBodies = [];
-    ropeBodies.push(ropeSoftBody);  // Just store one soft body instead of many rigid bodies
-    
-    // Add anchors to fixed points
-    if (anchorStart) {
-      ropeSoftBody.appendAnchor(0, anchorStart, true, 1.0);
-    }
-    
-    if (anchorEnd) {
-      ropeSoftBody.appendAnchor(segmentCount, anchorEnd, true, 1.0);
-    }
-    
-    console.log("Soft body rope created with " + segmentCount + " segments");
-    
-    // Initialize points array for visualization
-    updateRopeCurve();
-    createRopeMesh();
-  } catch (error) {
-    console.error("Error creating rope:", error);
-  }
-}
-
-// Reset soft body rope
-function resetRope() {
-  try {
-    // Remove all soft bodies from the world
-    if (ropeBodies && ropeBodies.length > 0) {
-      for (let softBody of ropeBodies) {
-        if (softBody) {
-          physicsWorld.removeSoftBody(softBody);
-        }
-      }
-    }
-    
-    // Clear arrays
-    ropeBodies = [];
-    ropePoints = [];
-    
-    // Remove meshes
-    if (ropeMeshes.length > 0) {
-      ropeMeshes.forEach(mesh => {
-        scene.remove(mesh);
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
-      ropeMeshes.length = 0;
-    }
-    
-    console.log("Rope reset complete");
-  } catch (error) {
-    console.error("Error resetting rope:", error);
-  }
-}
-
-// Update rope curve points from soft body nodes
-function updateRopeCurve() {
-  if (!ammoReady || ropeBodies.length === 0) return;
-  
-  try {
-    // Clear existing points
-    ropePoints.length = 0;
-    
-    // Get the soft body
-    const softBody = ropeBodies[0];
-    if (!softBody) return;
-    
-    // Get nodes from soft body
-    const nodes = softBody.get_m_nodes();
-    const nodeCount = softBody.get_m_nodes().size();
-    
-    // Extract positions from each node
-    for (let i = 0; i < nodeCount; i++) {
-      const node = nodes.at(i);
-      const nodePos = node.get_m_x();
-      
-      // Get position
-      const x = nodePos.x();
-      const y = nodePos.y();
-      const z = nodePos.z();
-      
-      if (isFinite(x) && isFinite(y) && isFinite(z)) {
-        ropePoints.push(new THREE.Vector3(x, y, z));
-      }
-    }
-    
-    // If we couldn't get valid points, use fallback
-    if (ropePoints.length < 2) {
-      console.warn("Failed to get valid rope points, using fallback");
-      const startPos = { x: -0.6, y: 0.07, z: 0.03 };
-      const endPos = { x: 0.57, y: 0.01, z: 0.025 };
-      
-      // Create a simple line with points
-      for (let i = 0; i <= segmentCount; i++) {
-        const t = i / segmentCount;
-        const x = startPos.x + (endPos.x - startPos.x) * t;
-        const y = startPos.y + (endPos.y - startPos.y) * t - Math.sin(t * Math.PI) * 0.25;
-        const z = startPos.z + (endPos.z - startPos.z) * t;
-        
-        ropePoints.push(new THREE.Vector3(x, y, z));
-      }
-    }
-  } catch (error) {
-    console.error("Error updating rope curve:", error);
-    ropePoints.length = 0;
-  }
-}
-
-// Apply rotation force to soft body rope
-function applyRotationForceToRope() {
-  if (!ammoReady || !coilerBody || ropeBodies.length === 0) return;
-  
-  try {
-    // Get the soft body
-    const softBody = ropeBodies[0];
-    if (!softBody) return;
-    
-    // Get coiler position
-    const ms = coilerBody.getMotionState();
-    if (!ms) return;
-    
-    ms.getWorldTransform(tmpTrans);
-    const coilerPos = tmpTrans.getOrigin();
-    const config = COILER_CONFIG[activeCoilerType];
-    
-    // Rotate coiler model
-    if (movingModel) {
-      // Higher rotation speed
-      const rotationSpeed = isPlaying ? 0.25 : 0.05;
-      movingModel.rotation.z += rotationSpeed;
-      
-      // Add wobble for realism
-      if (isPlaying) {
-        movingModel.position.y = 0.01 + Math.sin(frameCount * 0.1) * 0.003;
-      }
-    }
-    
-    // Get nodes from soft body
-    const nodes = softBody.get_m_nodes();
-    const nodeCount = nodes.size();
-    
-    // Apply force to each node
-    for (let i = 0; i < nodeCount; i++) {
-      const node = nodes.at(i);
-      const nodePos = node.get_m_x();
-      
-      const dx = nodePos.x() - coilerPos.x();
-      const dy = nodePos.y() - coilerPos.y();
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Apply rotation force with range
-      if (distance <= coilerRadius * 10.0) {
-        const angle = Math.atan2(dy, dx);
-        
-        // Very strong rotation force - key for good animation
-        const baseRotationSpeed = isPlaying ? -100.0 : -15.0;
-        
-        // Calculate tangential force components
-        const tangentX = -Math.sin(angle) * baseRotationSpeed;
-        const tangentY = Math.cos(angle) * baseRotationSpeed;
-        
-        // Exponential force falloff
-        const contactFactor = Math.pow(1.0 - (distance / (coilerRadius * 10.0)), 3);
-        const forceStrength = isPlaying ? 1.0 : 0.2;
-        
-        // Create force vector
-        const force = new AmmoLib.btVector3(
-          tangentX * forceStrength * contactFactor,
-          tangentY * forceStrength * contactFactor,
-          0
-        );
-        
-        // Apply force to node
-        node.m_f.setX(node.m_f.x() + force.x());
-        node.m_f.setY(node.m_f.y() + force.y());
-        node.m_f.setZ(node.m_f.z() + force.z());
-        
-        // Apply additional inward pull near coiler
-        if (distance <= coilerRadius * 2.5) {
-          const pullStrength = isPlaying ? 0.25 : 0.05;
-          node.m_f.setX(node.m_f.x() - (dx/distance * pullStrength));
-          node.m_f.setY(node.m_f.y() - (dy/distance * pullStrength));
-          
-          // Add z-confinement between coiler sides
-          const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
-          const zDiff = nodePos.z() - midZ;
-          const zWidth = (config.sideOffset1 - config.sideOffset2) * 0.45;
-          
-          if (Math.abs(zDiff) > zWidth) {
-            node.m_f.setZ(node.m_f.z() - (zDiff * 0.1));
-          }
-        }
-      }
-      
-      // Add random force for continuous movement
-      if (frameCount % 10 === i % 10) {
-        const jitterScale = isPlaying ? 0.05 : 0.01;
-        node.m_f.setX(node.m_f.x() + (Math.random() - 0.5) * jitterScale);
-        node.m_f.setY(node.m_f.y() + (Math.random() - 0.5) * jitterScale);
-        node.m_f.setZ(node.m_f.z() + (Math.random() - 0.5) * jitterScale);
-      }
-    }
-    
-    // Occasionally wake the soft body to ensure it doesn't deactivate
-    if (frameCount % 60 === 0) {
-      softBody.activate();
-    }
-  } catch (error) {
-    console.error("Error applying rotation force to rope:", error);
-  }
-}
-
-// Enhanced physics animation loop
-function animate() {
-  requestAnimationFrame(animate);
-  
-  frameCount++;
-  controls.update();
-  
-  // Run physics simulation in EVERY frame - crucial for continuous animation
-  if (ammoReady && physicsWorld) {
-    try {
-      // Physics stepping with high precision 
-      const timeStep = 1/180;  // 180 Hz simulation rate for smoothness
-      const maxSubSteps = isPlaying ? 5 : 3;
-      
-      // Step physics world
-      physicsWorld.stepSimulation(timeStep, maxSubSteps, timeStep/maxSubSteps);
-      
-      // Apply forces to rope
-      applyRotationForceToRope();
-      
-      // Periodically apply larger forces during play mode
-      if (isPlaying && frameCount % 20 === 0) {
-        applyExtraSoftBodyForces();
-      }
-      
-      // Update rope visualization with current physics state
-      updateRopeCurve();
-      
-      // Update visual mesh
-      if (frameCount % 2 === 0 && ropePoints.length >= 2) {
-        createRopeMesh();
-      }
-      
-      // Update anchor positions
-      updateEndAnchor();
-    } catch (error) {
-      console.error("Physics error:", error);
-    }
-  }
-  
-  renderer.render(scene, camera);
-}
-
-// Additional forces for more movement
-function applyExtraSoftBodyForces() {
-  if (!ammoReady || ropeBodies.length === 0) return;
-  
-  try {
-    const softBody = ropeBodies[0];
-    if (!softBody) return;
-    
-    const nodes = softBody.get_m_nodes();
-    const nodeCount = nodes.size();
-    
-    // Apply random forces to nodes in the middle section
-    const midStart = Math.floor(nodeCount * 0.2);
-    const midEnd = Math.floor(nodeCount * 0.8);
-    
-    for (let i = midStart; i < midEnd; i++) {
-      if (i % 3 !== 0) continue; // Only affect every third node
-      
-      const node = nodes.at(i);
-      
-      // Apply stronger random impulses
-      const forceX = (Math.random() - 0.5) * 0.4;
-      const forceY = (Math.random() - 0.5) * 0.4;
-      const forceZ = (Math.random() - 0.5) * 0.2;
-      
-      node.m_f.setX(node.m_f.x() + forceX);
-      node.m_f.setY(node.m_f.y() + forceY); 
-      node.m_f.setZ(node.m_f.z() + forceZ);
-    }
-  } catch (error) {
-    console.error("Error applying extra forces:", error);
-  }
-}
-
-// Add new rope segments during play mode
-function addRopeSegment() {
-  console.log("Soft body rope doesn't support adding segments dynamically");
-  // The soft body approach doesn't easily support adding segments dynamically
-  // If needed, we could recreate the entire rope with a different configuration
-}
-
-// Update end anchor position
-function updateEndAnchor() {
-  if (!dummy || !anchorEnd || !movingModel) return;
-  
-  try {
-    // Get world position of dummy object
-    const worldPos = new THREE.Vector3();
-    dummy.getWorldPosition(worldPos);
-    
-    // Update the end anchor position
-    const transform = new AmmoLib.btTransform();
-    transform.setIdentity();
-    transform.setOrigin(new AmmoLib.btVector3(worldPos.x, worldPos.y, worldPos.z));
-    
-    const ms = anchorEnd.getMotionState();
-    if (ms) {
-      ms.setWorldTransform(transform);
-    }
-  } catch (error) {
-    console.error("Error updating end anchor:", error);
-  }
-}
-
-// Improved animation loop with continuous physics simulation
-function animate() {
-  requestAnimationFrame(animate);
-  
-  frameCount++;
-  controls.update();
-  
-  // Always run physics simulation in every frame
-  if (ammoReady && physicsWorld) {
-    try {
-      // Higher precision physics stepping - critical for rope simulation
-      const subSteps = isPlaying ? 4 : 2;
-      const timeStep = 1/60;
-      
-      // Step physics with more substeps for better accuracy
-      physicsWorld.stepSimulation(timeStep, subSteps, timeStep/subSteps);
-      
-      // Wake up all rope bodies to prevent deactivation (crucial for continuous movement)
-      for (let i = 0; i < ropeBodies.length; i++) {
-        if (ropeBodies[i]) {
-          // Activate the body to ensure physics continues processing it
-          ropeBodies[i].activate();
-          
-          // Add tiny random force to prevent static equilibrium
-          if (frameCount % 10 === i % 10) {
-            const tinyForce = new AmmoLib.btVector3(
-              (Math.random() - 0.5) * 0.01,
-              (Math.random() - 0.5) * 0.01,
-              (Math.random() - 0.5) * 0.01
-            );
-            ropeBodies[i].applyCentralForce(tinyForce);
-          }
-        }
-      }
-      
-      // Apply stronger continuous forces to the rope
-      applyRotationForceToRope();
-      
-      // Periodically apply larger forces to create visible movement
-      if (frameCount % 30 === 0 && isPlaying) {
-        applyExtraForcesToRope();
-      }
-      
-      // Update rope visualization AFTER physics step
-      updateRopeCurve();
-      
-      // Re-create the rope mesh with the updated physics positions
-      if (ropePoints.length >= 2) {
-        createRopeMesh();
-      }
-      
-      // Update anchor positions
-      updateEndAnchor();
-      
-      // Debug output every few seconds
-      if (frameCount % 300 === 0) {
-        console.log(`Physics active - Rope has ${ropeBodies.length} segments, Frame ${frameCount}`);
-        
-        // Only call if function exists
-        if (typeof checkRopeActivity === 'function') {
-          checkRopeActivity();
-        }
-      }
-    } catch (error) {
-      console.error("Physics error:", error);
-    }
-  }
-  
-  renderer.render(scene, camera);
-}
-
-// New function to apply extra forces periodically for more visible movement
-function applyExtraForcesToRope() {
-  if (!ropeBodies.length) return;
-  
-  try {
-    // Apply random forces to middle sections for more dynamic movement
-    const midStart = Math.floor(ropeBodies.length * 0.3);
-    const midEnd = Math.floor(ropeBodies.length * 0.7);
-    
-    for (let i = midStart; i < midEnd; i++) {
-      if (!ropeBodies[i]) continue;
-      
-      const force = new AmmoLib.btVector3(
-        (Math.random() - 0.5) * 0.3,
-        (Math.random() - 0.5) * 0.3, 
-        (Math.random() - 0.5) * 0.15
-      );
-      
-      ropeBodies[i].applyCentralForce(force);
-    }
-    
-    // Add downward impulse for gravity effect
-    for (let i = 0; i < ropeBodies.length; i += 3) {
-      if (!ropeBodies[i]) continue;
-      
-      const impulse = new AmmoLib.btVector3(0, -0.05, 0);
-      ropeBodies[i].applyCentralImpulse(impulse);
-    }
-  } catch (error) {
-    console.error("Error applying extra forces:", error);
-  }
-}
-
-// Update end anchor position
-function updateEndAnchor() {
-  if (!dummy || !anchorEnd || !movingModel) return;
-  
-  try {
-    const worldPos = new THREE.Vector3();
-    dummy.getWorldPosition(worldPos);
-    
-    const transform = new AmmoLib.btTransform();
-    transform.setIdentity();
-    transform.setOrigin(new AmmoLib.btVector3(worldPos.x, worldPos.y, worldPos.z));
-    
-    const ms = anchorEnd.getMotionState();
-    if (ms) {
-      ms.setWorldTransform(transform);
-    }
-  } catch (error) {
-    console.error("Error updating end anchor:", error);
-  }
-}
-
-// Much more robust updateRopeCurve function
-function updateRopeCurve() {
-  if (!ammoReady || ropeBodies.length === 0) return;
-  
-  try {
-    // Clean existing points
-    ropePoints.length = 0;
-    
-    // Get positions from physics bodies
-    for (let i = 0; i < ropeBodies.length; i++) {
-      const body = ropeBodies[i];
-      if (!body) continue;
-      
-      const ms = body.getMotionState();
-      if (!ms) continue;
-      
-      try {
-        ms.getWorldTransform(tmpTrans);
-        const pos = tmpTrans.getOrigin();
-        
-        if (pos) {
-          const x = pos.x();
-          const y = pos.y();
-          const z = pos.z();
-          
-          if (isFinite(x) && isFinite(y) && isFinite(z)) {
-            ropePoints.push(new THREE.Vector3(x, y, z));
-          } else {
-            // Use a reasonable fallback position if NaN
-            const t = i / (ropeBodies.length - 1);
-            const startPos = { x: -0.6, y: 0.07, z: 0.03 };
-            const endPos = { x: 0.57, y: 0.01, z: 0.025 };
-            const fallbackX = startPos.x + (endPos.x - startPos.x) * t;
-            const fallbackY = startPos.y + (endPos.y - startPos.y) * t - Math.sin(t * Math.PI) * 0.3;
-            const fallbackZ = startPos.z + (endPos.z - startPos.z) * t;
-            
-            ropePoints.push(new THREE.Vector3(fallbackX, fallbackY, fallbackZ));
-            
-            // Try to fix the physics body
-            const transform = new AmmoLib.btTransform();
-            transform.setIdentity();
-            transform.setOrigin(new AmmoLib.btVector3(fallbackX, fallbackY, fallbackZ));
-            ms.setWorldTransform(transform);
-          }
-        }
-      } catch (err) {
-        // Skip problematic transform
-      }
-    }
-  } catch (error) {
-    console.error("Error updating rope curve:", error);
-    // Ensure we have some points to avoid Three.js errors
-    if (ropePoints.length < 2) {
-      const startPos = { x: -0.6, y: 0.07, z: 0.03 };
-      const endPos = { x: 0.57, y: 0.01, z: 0.025 };
-      ropePoints.push(new THREE.Vector3(startPos.x, startPos.y, startPos.z));
-      ropePoints.push(new THREE.Vector3(endPos.x, endPos.y, endPos.z));
-    }
-  }
-}
-
-// Improve the createRopeMesh function with better error handling
-function createRopeMesh() {
-  try {
-    if (ropeMeshes.length > 0) {
-      ropeMeshes.forEach(mesh => {
-        scene.remove(mesh);
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
-      ropeMeshes.length = 0;
-    }
-
-    // Ensure we have valid points
-    if (!ropePoints || ropePoints.length < 2) {
-      console.log("Not enough valid rope points to create mesh");
-      return;
-    }
-
-    // Create curve and geometry with error handling
-    try {
-      const curve = new THREE.CatmullRomCurve3(ropePoints); 
-      const tubeGeometry = new THREE.TubeGeometry(
-        curve, 
-        Math.min(segmentCount * 8, ropePoints.length * 4),
-        ropeRadius * 0.8,
-        16, 
-        false
-      );
-
-      const textureLoader = new THREE.TextureLoader();
-      
-      const colourMap = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(8, 1);
-        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      });
-
-      const normalMap = textureLoader.load('./assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(8, 1);
-      });
-
-      const roughnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Roughness.jpg', function(texture) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(8, 1);
-      });
-
-      // Compute UV mapping safely
-      tubeGeometry.computeBoundingBox();
-      const boundingBox = tubeGeometry.boundingBox;
-      if (boundingBox) {
-        const size = new THREE.Vector3();
-        boundingBox.getSize(size);
-        const uvAttribute = tubeGeometry.attributes.uv;
-        if (uvAttribute) {
-          for (let i = 0; i < uvAttribute.count; i++) {
-            let u = uvAttribute.getX(i);
-            uvAttribute.setXY(i, u * size.length() * 0.5, uvAttribute.getY(i));
-          }
-          uvAttribute.needsUpdate = true;
-        }
-      }
-
-      const ropeMaterial = new THREE.MeshStandardMaterial({
-        map: colourMap,
-        normalMap: normalMap,
-        roughnessMap: roughnessMap,
-        roughness: 0.7,
-        metalness: 0.2,
-        side: THREE.DoubleSide
-      });
-
-      const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
-      tubeMesh.castShadow = true;
-      tubeMesh.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
-      scene.add(tubeMesh);
-      ropeMeshes.push(tubeMesh);
-    } catch (err) {
-      console.error("Error creating rope tube geometry:", err);
-    }
-  } catch (error) {
-    console.error("Error in createRopeMesh:", error);
-  }
-}
-
-// Start animation loop
-animate();
-
-// Make sure we call setTimeout for checkAndCreateRope to ensure the rope is created
-setTimeout(() => {
-  console.log("Delayed rope creation check");
-  checkAndCreateRope();
-}, 2000); // Increased timeout to ensure everything is loaded
 
 let spoolModel = null;
 
@@ -1301,8 +961,8 @@ loader.load(
   './assets/table.gltf',
   (gltf) => {
     benchModel = gltf.scene;
-    benchModel.position.set(-1.8, -0.6, -1.235);
-    benchModel.scale.set(0.5, 0.5, 0.5);
+    benchModel.position.set(-1.8, -0.6, -1.35);
+    benchModel.scale.set(0.4, 0.4, 0.4);
     benchModel.rotation.y = (Math.PI / 2);
     scene.add(benchModel);
   }
@@ -1312,8 +972,8 @@ loader.load(
   './assets/table.gltf',
   (gltf) => {
     benchModel2 = gltf.scene;
-    benchModel2.position.set(-1.15, -0.6, -1.8);
-    benchModel2.scale.set(0.5, 0.5, 0.5);
+    benchModel2.position.set(-1, -0.6, -1.8);
+    benchModel2.scale.set(0.4, 0.4, 0.4);
     scene.add(benchModel2);
   }
 );
@@ -1322,8 +982,8 @@ loader.load(
   './assets/toolbox.gltf',
   (gltf) => {
     toolbox = gltf.scene;
-    toolbox.position.set(1.5, -0.65, -1.8);
-    toolbox.scale.set(0.6, 0.6, 0.6);
+    toolbox.position.set(1.6, -0.69, -1.8);
+    toolbox.scale.set(0.4, 0.4, 0.4);
     scene.add(toolbox);
   }
 );
@@ -1333,7 +993,7 @@ loader.load(
   './assets/100-10-STAND.gltf',
   (gltf) => {
     model1410 = gltf.scene;
-    model1410.position.set(-0.5, -0.85, -1.71);
+    model1410.position.set(-0.5, -0.83, -1.71);
     model1410.rotation.x = (Math.PI / 2);
     model1410.rotation.z = (Math.PI / 2.5);
     model1410.rotation.y = (Math.PI / 1.02);
@@ -1341,241 +1001,191 @@ loader.load(
   }
 );
 
-const endOfRope = ropeBodies[segmentCount - 1];
-const midRope = 10;
 
-function completeConfig(){
-  return reelSelect.value && counterSelect.value && coilerSelect.value;
-}
 
-// More detailed debug output function
-function checkPhysicsState() {
-  if (!ammoReady) {
-    console.warn("Physics not ready yet");
-    return;
-  }
+
+function applyRotationForceToRope() {
+  if (!coilerBody || !isPlaying) return;
   
-  console.log("%cPhysics State Check:", "color: green; font-weight: bold", {
-    ammoReady: ammoReady,
-    physicsWorldExists: !!physicsWorld,
-    ropeSegments: ropeBodies.length,
-    constraints: constraints.length,
-    activeCoilerType: activeCoilerType,
-    coilerExists: !!coilerBody,
-    isPlaying: isPlaying,
-    frameCount: frameCount,
-    ropePointsCount: ropePoints.length,
-    ropeMeshCount: ropeMeshes.length
+  const coilerPos = coilerBody.position;
+  const config = COILER_CONFIG[activeCoilerType];
+  
+  if (!window.forceCounter) window.forceCounter = 0;
+  window.forceCounter = (window.forceCounter + 1) % 2;
+  if (window.forceCounter !== 0) return;
+  
+  const baseRotationSpeed = -2.8;
+  const sizeRatio = 0.2 / coilerRadius;
+  const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+  
+  ropeBodies.forEach((segment) => {
+    if (!segment) return;
+    
+    const dx = segment.position.x - coilerPos.x;
+    const dy = segment.position.y - coilerPos.y;
+    const dz = segment.position.z - coilerPos.z;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance <= coilerRadius * 1.5) {
+      const angle = Math.atan2(dy, dx);
+      const tangentX = -Math.sin(angle) * Math.abs(rotationSpeed);
+      const tangentY = Math.cos(angle) * Math.abs(rotationSpeed);
+      
+      const contactFactor = Math.max(0, 1.0 - (distance / (coilerRadius * 1.5)));
+      const frictionStrength = 0.007;
+      
+      segment.applyForce(
+        new Vec3(
+          tangentX * frictionStrength * contactFactor, 
+          tangentY * frictionStrength * contactFactor, 
+          0
+        ), 
+        segment.position
+      );
+      
+      if (distance <= coilerRadius * 1.05) {
+        segment.velocity.scale(0.98);
+        segment.angularVelocity.scale(0.98);
+      }
+      
+      const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
+      const maxZDistance = (config.sideOffset1 - config.sideOffset2) * 0.45;
+      
+      if (Math.abs(segment.position.z - midZ) > maxZDistance) {
+        const zForce = (midZ - segment.position.z) * 0.001;
+        segment.applyForce(new Vec3(0, 0, zForce), segment.position);
+      }
+    }
   });
-  
-  // Check if first and last rope segments match the anchors
-  if (ropeBodies.length > 0) {
-    try {
-      const firstBody = ropeBodies[0];
-      const lastBody = ropeBodies[ropeBodies.length - 1];
-      
-      if (!firstBody || !lastBody) {
-        console.warn("First or last rope body is null");
-        return;
-      }
-      
-      const firstMs = firstBody.getMotionState();
-      const lastMs = lastBody.getMotionState();
-      
-      if (!firstMs || !lastMs) {
-        console.warn("Motion state not available for rope endpoints");
-        return;
-      }
-      
-      firstMs.getWorldTransform(tmpTrans);
-      const firstPos = tmpTrans.getOrigin();
-      
-      lastMs.getWorldTransform(tmpTrans);
-      const lastPos = tmpTrans.getOrigin();
-      
-      // Make sure we have valid coordinates
-      if (!firstPos || !lastPos) {
-        console.warn("Rope positions not available");
-        return;
-      }
-      
-      const fx = isNaN(firstPos.x()) ? "NaN" : firstPos.x().toFixed(3);
-      const fy = isNaN(firstPos.y()) ? "NaN" : firstPos.y().toFixed(3);
-      const fz = isNaN(firstPos.z()) ? "NaN" : firstPos.z().toFixed(3);
-      
-      const lx = isNaN(lastPos.x()) ? "NaN" : lastPos.x().toFixed(3);
-      const ly = isNaN(lastPos.y()) ? "NaN" : lastPos.y().toFixed(3);
-      const lz = isNaN(lastPos.z()) ? "NaN" : lastPos.z().toFixed(3);
-      
-      console.log("%cRope endpoints:", "color: blue; font-weight: bold", {
-        startX: fx,
-        startY: fy,
-        startZ: fz,
-        endX: lx,
-        endY: ly,
-        endZ: lz,
-        hasMoved: typeof ropeHasMoved === 'function' ? ropeHasMoved() : 'unknown'
-      });
-      
-      // If we have NaN values, try to fix the bodies
-      if (fx === "NaN" || fy === "NaN" || fz === "NaN" || 
-          lx === "NaN" || ly === "NaN" || lz === "NaN") {
-        console.warn("NaN positions detected, attempting to fix rope");
-        tryFixRope();
-      }
-    } catch (e) {
-      console.error("Error checking rope positions:", e);
-    }
-  }
-  
-  // Schedule next check
-  setTimeout(checkPhysicsState, 5000);
 }
 
-// Helper to check if rope has moved from initial positions
-function ropeHasMoved() {
-  if (ropeBodies.length < 3) return false;
+function animate() {
+  requestAnimationFrame(animate);
   
   try {
-    // Check middle segment for movement
-    const middleIndex = Math.floor(ropeBodies.length / 2);
-    const body = ropeBodies[middleIndex];
-    if (!body) return false;
+    const timeStep = 1/120;
+    const subSteps = 10;
     
-    try {
-      const ms = body.getMotionState();
-      if (!ms) return false;
-      
-      ms.getWorldTransform(tmpTrans);
-      
-      const vel = body.getLinearVelocity();
-      if (!vel) return false;
-      
-      const isMoving = Math.abs(vel.x()) > 0.01 || 
-                      Math.abs(vel.y()) > 0.01 || 
-                      Math.abs(vel.z()) > 0.01;
-                      
-      return isMoving;
-    } catch (e) {
-      console.warn("Error checking velocity:", e);
-      return false;
+    for (let i = 0; i < subSteps; i++) {
+      world.step(timeStep / subSteps);
     }
-  } catch (e) {
-    console.warn("Error in ropeHasMoved:", e);
-    return false;
-  }
-}
 
-// Add the missing checkRopeActivity function
-function checkRopeActivity() {
-  if (ropeBodies.length < 5) return;
-  
-  try {
-    let activeCount = 0;
-    let totalVelocity = 0;
-    
-    for (let i = 0; i < ropeBodies.length; i++) {
-      const body = ropeBodies[i];
-      if (!body) continue;
+    if (isPlaying) {
+      //applyRotationForceToRope();
       
-      try {
-        // Check if body is active in physics simulation
-        if (body.isActive()) {
-          activeCount++;
+      const baseRotationSpeed = -2.8;
+      const sizeRatio = 0.2 / coilerRadius;
+      const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+      
+      if (ropeBodies.length > 299) {
+        isPlaying = false;
+        coilerBody.angularVelocity.set(0, 0, 0);
+        if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
+        if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
+        for (let i = 0; i < ropeBodies.length; i++) {
+          ropeBodies[i].velocity.set(0, 0, 0);
+          ropeBodies[i].angularVelocity.set(0, 0, 0);
+          ropeBodies[i].type = BODY_TYPES.STATIC;
         }
+      }
+
+      if (coilerBody) {
+        coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      if (coilerBodySide1) {
+        coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      if (coilerBodySide2) {
+        coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+      }
+      
+      const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
+      
+      if (coilerBodyMesh) {
+        coilerBodyMesh.rotation.z -= visualRotation;
+      }
+      
+      if (coilerBodyMeshSide1) {
+        coilerBodyMeshSide1.rotation.z -= visualRotation;
+      }
+      
+      if (coilerBodyMeshSide2) {
+        coilerBodyMeshSide2.rotation.z -= visualRotation;
+      }
+      
+      if (movingModel) {
+        movingModel.rotation.z += visualRotation;
+      }
+    }
+
+
+    if (dummy) {
+      dummy.getWorldPosition(temp);
+      
+      if (anchorEnd) {
+        // REPLACE this interpolation code:
+        // anchorEnd.position.x = anchorEnd.position.x * 0.2 + temp.x * 0.8;
+        // anchorEnd.position.y = anchorEnd.position.y * 0.2 + temp.y * 0.8;
+        // anchorEnd.position.z = anchorEnd.position.z * 0.2 + temp.z * 0.8;
         
-        // Get and sum velocity magnitudes
-        const vel = body.getLinearVelocity();
-        if (vel) {
-          totalVelocity += Math.sqrt(vel.x()*vel.x() + vel.y()*vel.y() + vel.z()*vel.z());
-        }
-      } catch (bodyError) {
-        // Skip individual problematic bodies
-        console.warn("Error checking rope segment activity:", bodyError);
-      }
-    }
-    
-    console.log(`Rope activity: ${activeCount}/${ropeBodies.length} segments active, Avg velocity: ${(totalVelocity/ropeBodies.length).toFixed(4)}`);
-    
-    // Re-activate bodies if too many are sleeping
-    if (activeCount < ropeBodies.length * 0.5) {
-      console.log("Reactivating rope bodies");
-      for (let i = 0; i < ropeBodies.length; i++) {
-        const body = ropeBodies[i];
-        if (body) {
-          try {
-            body.activate();
-            body.setActivationState(4); // DISABLE_DEACTIVATION
-          } catch (err) {
-            console.warn("Failed to activate body:", err);
-          }
+        // WITH direct position setting:
+        anchorEnd.position.x = temp.x;
+        anchorEnd.position.y = temp.y;
+        anchorEnd.position.z = temp.z;
+        
+        // Add these to ensure the anchor point is fixed:
+        anchorEnd.velocity.set(0, 0, 0);
+        anchorEnd.angularVelocity.set(0, 0, 0);
+        
+        // Add damping to the last few segments to reduce wiggling
+        const lastSegmentCount = 5;
+        for (let i = Math.max(0, ropeBodies.length - lastSegmentCount); i < ropeBodies.length; i++) {
+          ropeBodies[i].velocity.scale(0.9); // Add stronger damping
+          ropeBodies[i].angularVelocity.scale(0.9);
         }
       }
     }
-  } catch (error) {
-    console.error("Error checking rope activity:", error);
-  }
-}
 
-// Add a function to try to fix broken rope
-function tryFixRope() {
-  if (!ammoReady || ropeBodies.length === 0) return;
-  
-  try {
-    console.log("Attempting to fix rope with NaN positions");
-    
-    // Reset any problematic bodies to valid positions
-    const startPos = { x: -0.6, y: 0.07, z: 0.03 };
-    const endPos = { x: 0.57, y: 0.01, z: 0.025 };
-    
-    for (let i = 0; i < ropeBodies.length; i++) {
-      if (!ropeBodies[i]) continue;
-      
-      const ms = ropeBodies[i].getMotionState();
-      if (!ms) continue;
-      
-      // Get current position
-      ms.getWorldTransform(tmpTrans);
-      const pos = tmpTrans.getOrigin();
-      
-      // If position is NaN or invalid, reset it
-      if (!pos || isNaN(pos.x()) || isNaN(pos.y()) || isNaN(pos.z())) {
-        const t = i / (ropeBodies.length - 1);
-        const x = startPos.x + (endPos.x - startPos.x) * t;
-        const y = startPos.y + (endPos.y - startPos.y) * t - Math.sin(t * Math.PI) * 0.25;
-        const z = startPos.z + (endPos.z - startPos.z) * t;
-        
-        // Create new transform with valid position
-        const transform = new AmmoLib.btTransform();
-        transform.setIdentity();
-        transform.setOrigin(new AmmoLib.btVector3(x, y, z));
-        
-        // Reset motion state
-        ms.setWorldTransform(transform);
-        
-        // Reset velocity
-        ropeBodies[i].setLinearVelocity(new AmmoLib.btVector3(0, 0, 0));
-        ropeBodies[i].setAngularVelocity(new AmmoLib.btVector3(0, 0, 0));
-        
-        console.log(`Fixed rope segment ${i}`);
+    if (ropeBodies.length > 0) {
+      updateRopeCurve();
+      if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+        const curve = new THREE.CatmullRomCurve3(ropePoints);
+        const oldmaterial = ropeMeshes[0].material;
+        ropeMeshes[0].geometry.dispose();
+
+        const tubeGeometry = new THREE.TubeGeometry(
+          curve,
+          Math.min(ropeBodies.length * 3, 120),
+          ropeRadius * 0.8,
+          12,
+          false
+        );
+
+        tubeGeometry.computeBoundingBox();
+        const boundingBox = tubeGeometry.boundingBox;
+        const size = new THREE.Vector3();
+        boundingBox.getSize(size);
+        const uvAttribute = tubeGeometry.attributes.uv;
+        for (let i = 0; i < uvAttribute.count; i++){
+          let u = uvAttribute.getX(i);
+          uvAttribute.set(i, u * size.length() * 0.5);
+        }
+        uvAttribute.needsUpdate = true;
+        ropeMeshes[0].geometry = tubeGeometry;
       }
     }
-    
-    // Wake up all bodies
-    for (let body of ropeBodies) {
-      if (body) {
-        body.activate();
-      }
+    if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
+      createRopeMesh();
     }
-  } catch (error) {
-    console.error("Error trying to fix rope:", error);
+    controls.update();
+    renderer.render(scene, camera);
+  } catch (err) {
+    console.error("Error in animation loop:", err);
   }
 }
-
-// Initialize immediately
-preloadAmmo();
-// Run state check after physics is ready
-setTimeout(checkPhysicsState, 3000);
+animate();
 
 setTimeout(() => {
   checkAndCreateRope();
