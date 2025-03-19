@@ -164,7 +164,7 @@ function onPlayClick() {
       if (isPlaying) {
         addRopeSegment();
       }
-    }, 95);
+    }, 125);
   }
 }
 playBtn.addEventListener('pointerdown', onPlayClick);
@@ -453,7 +453,7 @@ function createRopeSegments() {
 
   const endOfRope = ropeBodies[segmentCount - 1];
   
-  anchorStart.position.set(-0.55, -0.06, 0.035);
+  anchorStart.position.set(-0.55, 0.1, 0.035);
   
   const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
   world.addConstraint(anchorConstraint);
@@ -732,7 +732,7 @@ function addRopeSegment(){
     newBody.linearDamping = 0.95;
     
     world.addBody(newBody);
-    ropeBodies.push(newBody);
+    ropeBodies.splice(11, 0, newBody); 
     
     const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
