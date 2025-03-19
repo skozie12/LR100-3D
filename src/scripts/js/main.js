@@ -425,12 +425,36 @@ function checkAndCreateRope() {
 function createRopeSegments() {
   resetRope();
   
+  // Start with the initial rope bodies
   for (let i = 0; i < segmentCount; i++) {
     const sphereShape = new Sphere(segmentWidth / 2);
+    
+    // Create starting positions along a path from start to end
+    const t = i / (segmentCount - 1);
+    let x, y, z;
+    
+    if (i <= midRope) {
+      // First section: from anchorStart to anchor (midpoint)
+      const segT = i / midRope;
+      x = anchorStart.position.x + segT * (anchor.position.x - anchorStart.position.x);
+      y = anchorStart.position.y + segT * (anchor.position.y - anchorStart.position.y);
+      z = anchorStart.position.z + segT * (anchor.position.z - anchorStart.position.z);
+      // Add slight curve
+      y += Math.sin(segT * Math.PI) * 0.05;
+    } else {
+      // Second section: from anchor (midpoint) to anchorEnd
+      const segT = (i - midRope) / (segmentCount - midRope - 1);
+      x = anchor.position.x + segT * (anchorEnd.position.x - anchor.position.x);
+      y = anchor.position.y + segT * (anchorEnd.position.y - anchor.position.y);
+      z = anchor.position.z + segT * (anchorEnd.position.z - anchorEnd.position.z);
+      // Add slight curve
+      y += Math.sin(segT * Math.PI) * 0.05;
+    }
+    
     const segmentBody = new Body({ 
       mass: segmentMass, 
       shape: sphereShape, 
-      position: new Vec3(0, 3 - i * segmentDistance, 0), 
+      position: new Vec3(x, y, z),
       material: defaultMaterial,
       collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
       collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
@@ -442,27 +466,31 @@ function createRopeSegments() {
     ropeBodies.push(segmentBody);
   }
 
+  // Create constraints between segments more efficiently
   for (let i = 0; i < segmentCount - 1; i++) {
-    const bodyA = ropeBodies[i];
-    const bodyB = ropeBodies[i + 1];  
-    const constraint = new DistanceConstraint(bodyA, bodyB, segmentDistance, 1e5);
-    constraint.collideConnected = true;
+    const constraint = new DistanceConstraint(
+      ropeBodies[i], 
+      ropeBodies[i + 1], 
+      segmentDistance,
+      1e5
+    );
+    constraint.collideConnected = false;
     constraint.maxForce = 1e3;
     world.addConstraint(constraint);
   }
 
-  const endOfRope = ropeBodies[segmentCount - 1];
-  
-  anchorStart.position.set(-0.55, 0.1, 0.035);
-  
+  // Connect to anchor points - more direct approach
   const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
   world.addConstraint(anchorConstraint);
 
   const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
   world.addConstraint(anchorStartConstraint);
 
-  const anchorEndConstraint = new DistanceConstraint(anchorEnd, endOfRope, 0);
+  const anchorEndConstraint = new DistanceConstraint(anchorEnd, ropeBodies[segmentCount - 1], 0);
   world.addConstraint(anchorEndConstraint);
+  
+  // Pre-create the visual mesh immediately
+  createRopeMesh();
 }
 
 const reelSelect = document.getElementById('reelStandSelect');
@@ -575,13 +603,26 @@ function createRopeMesh(){
 
   updateRopeCurve();
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
+  
+  // Store the curve reference for later updates
+  window.ropeCurve = curve;
+  
+  // Create geometry with moderate resolution for first render
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 32,
+    segmentCount * 4, // Lower initial resolution for better performance
     ropeRadius * 0.8,
-    32, 
+    16, // Reduced from 32 for better performance
     false
   );
+  
+  // Store the parameters used for later updates
+  tubeGeometry.userData = {
+    tubularSegments: segmentCount * 4,
+    radius: ropeRadius * 0.8,
+    radialSegments: 16,
+    closed: false
+  };
 
   const textureLoader = new THREE.TextureLoader();
   
@@ -639,7 +680,7 @@ function createRopeMesh(){
 
   const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
   tubeMesh.castShadow = true;
-  tubeMesh.recieveShadow = true;
+  tubeMesh.receiveShadow = true; // Fixed typo: recieveShadow -> receiveShadow
   scene.add(tubeMesh);
   ropeMeshes.push(tubeMesh);
   if (!renderer.shadowMap.enabled) {
@@ -649,6 +690,78 @@ function createRopeMesh(){
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
   }
+}
+
+// Add a new function to update the rope geometry directly
+function updateRopeGeometry() {
+  if (ropeMeshes.length === 0 || !ropeMeshes[0]) return;
+  
+  const mesh = ropeMeshes[0];
+  const geometry = mesh.geometry;
+  
+  if (!geometry || !geometry.userData) return;
+  
+  // Update curve with new points
+  updateRopeCurve();
+  const curve = new THREE.CatmullRomCurve3(ropePoints);
+  window.ropeCurve = curve;
+  
+  // Get parameters from stored userData
+  const { tubularSegments, radius, radialSegments } = geometry.userData;
+  
+  // Access position attribute directly
+  const positionAttr = geometry.attributes.position;
+  if (!positionAttr) return;
+  
+  // Get vertices as Vector3
+  const up = new THREE.Vector3(0, 1, 0);
+  const frames = curve.computeFrenetFrames(tubularSegments, false);
+  
+  // Position and normal variables
+  const vertex = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  
+  // Rebuild vertices without recreating geometry
+  let idx = 0;
+  
+  // For each tube segment
+  for (let i = 0; i <= tubularSegments; i++) {
+    // Get current point on curve
+    const u = i / tubularSegments;
+    const point = curve.getPointAt(u);
+    const tangent = curve.getTangentAt(u);
+    
+    // Calculate normal and binormal
+    const N = frames.normals[i];
+    const B = frames.binormals[i];
+    
+    // For each vertex in the tube's circumference
+    for (let j = 0; j <= radialSegments; j++) {
+      // Calculate angle for this radial vertex
+      const v = j / radialSegments * Math.PI * 2;
+      const sin = Math.sin(v);
+      const cos = -Math.cos(v);
+      
+      // Calculate vertex position
+      normal.x = cos * N.x + sin * B.x;
+      normal.y = cos * N.y + sin * B.y;
+      normal.z = cos * N.z + sin * B.z;
+      normal.multiplyScalar(radius);
+      
+      vertex.copy(point).add(normal);
+      
+      // Update position data
+      positionAttr.setXYZ(idx, vertex.x, vertex.y, vertex.z);
+      idx++;
+    }
+  }
+  
+  // Mark attributes as needing update
+  positionAttr.needsUpdate = true;
+  
+  // Update bounding box for proper rendering
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
 }
 
 const endOfRope = ropeBodies[segmentCount - 1];
@@ -674,40 +787,21 @@ function addRopeSegment(){
     if (ropeBodies.length >= 300) return;
     if (ropeBodies.length < 11) return;
     
-    const prevBody = ropeBodies[10]; 
-    const nextBody = ropeBodies[11]; 
+    // Instead of inserting at position 11 and shifting the entire array,
+    // we'll use a ring buffer approach with a fixed insertion point
     
-    world.constraints.forEach((constraint) => {
-      if ((constraint.bodyA === prevBody && constraint.bodyB === nextBody) ||
-          (constraint.bodyA === nextBody && constraint.bodyB === prevBody)) {
-        world.removeConstraint(constraint);
-      }
-    });
-
-    if (!window.addedSegments) window.addedSegments = 0;
-    window.addedSegments++;
+    // Track fixed anchor points
+    const anchorEndIndex = ropeBodies.length - 1;
     
-    if (!window.currentDirection) window.currentDirection = 1;
-    if (!window.currentZ) window.currentZ = 0;
-    
-    if (window.addedSegments % 30 === 0) {
-      window.currentDirection *= -1;
-    }
-    
-    const config = COILER_CONFIG[activeCoilerType];
-    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8;
-    window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
-    const maxZ = zRange * 0.45;
-    const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
-    window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
-    
+    // Create the new segment based on position 10
+    const baseSegment = ropeBodies[10];
     const newBody = new Body({ 
       mass: segmentMass, 
       shape: new Sphere(segmentWidth / 2), 
       position: new Vec3(
-        prevBody.position.x,
-        prevBody.position.y,
-        prevBody.position.z
+        baseSegment.position.x,
+        baseSegment.position.y,
+        baseSegment.position.z
       ),
       material: defaultMaterial,
       collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
@@ -715,8 +809,8 @@ function addRopeSegment(){
     });
     
     if (coilerBody) {
-      const dx = coilerBody.position.x - prevBody.position.x;
-      const dy = coilerBody.position.y - prevBody.position.y;
+      const dx = coilerBody.position.x - baseSegment.position.x;
+      const dy = coilerBody.position.y - baseSegment.position.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
       
       if (dist > 0.1) {
@@ -731,10 +825,50 @@ function addRopeSegment(){
     newBody.angularDamping = 0.95;
     newBody.linearDamping = 0.95;
     
+    // Add the new body to the world
     world.addBody(newBody);
-    ropeBodies.splice(11, 0, newBody); 
     
-    const constraintPrev = new DistanceConstraint(prevBody, newBody, segmentDistance, 1e5);
+    // Store all constraints that need to be updated
+    const constraintsToUpdate = [];
+    
+    // Find and store all constraints connected to position 10 & 11
+    world.constraints.forEach((constraint) => {
+      if ((constraint.bodyA === ropeBodies[10] && constraint.bodyB === ropeBodies[11]) ||
+          (constraint.bodyA === ropeBodies[11] && constraint.bodyB === ropeBodies[10])) {
+        constraintsToUpdate.push(constraint);
+        world.removeConstraint(constraint);
+      }
+    });
+    
+    // Get reference to position 11 before we change the array
+    const nextBody = ropeBodies[11];
+    
+    // Update tracking counters for zigzag pattern
+    if (!window.addedSegments) window.addedSegments = 0;
+    window.addedSegments++;
+    
+    if (!window.currentDirection) window.currentDirection = 1;
+    if (!window.currentZ) window.currentZ = 0;
+    
+    if (window.addedSegments % 30 === 0) {
+      window.currentDirection *= -1;
+    }
+    
+    const config = COILER_CONFIG[activeCoilerType];
+    const zRange = (config.sideOffset1 - config.sideOffset2) * 0.8;
+    window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
+    const maxZ = zRange * 0.45;
+    window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
+    
+    // Add to array using push instead of splice for better performance
+    // We'll rearrange the array more efficiently
+    const tailSegments = ropeBodies.slice(11);
+    ropeBodies.length = 11; // Truncate the array
+    ropeBodies.push(newBody); // Add new segment
+    ropeBodies.push(...tailSegments); // Re-add tail segments
+    
+    // Create constraints for the new segment
+    const constraintPrev = new DistanceConstraint(ropeBodies[10], newBody, segmentDistance, 1e5);
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
     constraintPrev.collideConnected = false;
     constraintNext.collideConnected = false;
@@ -742,6 +876,19 @@ function addRopeSegment(){
     constraintNext.maxForce = 1e3;
     world.addConstraint(constraintPrev);
     world.addConstraint(constraintNext);
+    
+    // Update the constraint to the end anchor if needed
+    if (anchorEndIndex === ropeBodies.length - 2) {
+      // We need to update the end anchor constraint
+      world.constraints.forEach((constraint) => {
+        if (constraint instanceof DistanceConstraint && 
+            (constraint.bodyA === anchorEnd || constraint.bodyB === anchorEnd)) {
+          world.removeConstraint(constraint);
+          const newConstraint = new DistanceConstraint(anchorEnd, ropeBodies[ropeBodies.length - 1], 0);
+          world.addConstraint(newConstraint);
+        }
+      });
+    }
   } catch (err) {
     console.error("Error in addRopeSegment:", err);
   }
@@ -953,6 +1100,7 @@ function loadSpoolFromMovingAssets() {
       spoolModel.position.set(-0.55, -0.06, 0.035);
       spoolModel.scale.set(11, 11, 11);
       scene.add(spoolModel);
+      createFloorCoil();
     },
   );
 }
@@ -1002,60 +1150,60 @@ loader.load(
   }
 );
 
-/*function applyRotationForceToRope() {
-  if (!coilerBody || !isPlaying) return;
+let floorCoilMesh = null;
+function createFloorCoil() {
+  if (floorCoilMesh) {
+    scene.remove(floorCoilMesh);
+    floorCoilMesh.geometry.dispose();
+    floorCoilMesh.material.dispose();
+    floorCoilMesh = null;
+  }
+
+  const points = [];
+  const coilRadius = 0.1;
+  const coilHeight = 0.21;
+  const turns = 22;
+  const pointsPerTurn = 24;
   
-  const coilerPos = coilerBody.position;
-  const config = COILER_CONFIG[activeCoilerType];
-  
-  if (!window.forceCounter) window.forceCounter = 0;
-  window.forceCounter = (window.forceCounter + 1) % 2;
-  if (window.forceCounter !== 0) return;
-  
-  const baseRotationSpeed = -2.8;
-  const sizeRatio = 0.2 / coilerRadius;
-  const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-  
-  ropeBodies.forEach((segment) => {
-    if (!segment) return;
+  for (let i = 0; i <= turns * pointsPerTurn; i++) {
+    const t = i / (turns * pointsPerTurn);
+    const angle = turns * Math.PI * 2 * t;
     
-    const dx = segment.position.x - coilerPos.x;
-    const dy = segment.position.y - coilerPos.y;
-    const dz = segment.position.z - coilerPos.z;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance <= coilerRadius * 1.5) {
-      const angle = Math.atan2(dy, dx);
-      const tangentX = -Math.sin(angle) * Math.abs(rotationSpeed);
-      const tangentY = Math.cos(angle) * Math.abs(rotationSpeed);
-      
-      const contactFactor = Math.max(0, 1.0 - (distance / (coilerRadius * 1.5)));
-      const frictionStrength = 0.007;
-      
-      segment.applyForce(
-        new Vec3(
-          tangentX * frictionStrength * contactFactor, 
-          tangentY * frictionStrength * contactFactor, 
-          0
-        ), 
-        segment.position
-      );
-      
-      if (distance <= coilerRadius * 1.05) {
-        segment.velocity.scale(0.98);
-        segment.angularVelocity.scale(0.98);
-      }
-      
-      const midZ = (config.sideOffset1 + config.sideOffset2) / 2;
-      const maxZDistance = (config.sideOffset1 - config.sideOffset2) * 0.45;
-      
-      if (Math.abs(segment.position.z - midZ) > maxZDistance) {
-        const zForce = (midZ - segment.position.z) * 0.001;
-        segment.applyForce(new Vec3(0, 0, zForce), segment.position);
-      }
-    }
+    points.push(new THREE.Vector3(
+      coilRadius * Math.cos(angle), 
+      -0.74 + (coilHeight * t) + 0.7,  
+      coilRadius * Math.sin(angle)     
+    ));
+  }
+  
+  const coilCurve = new THREE.CatmullRomCurve3(points);
+  const tubeGeometry = new THREE.TubeGeometry(
+    coilCurve, 
+    points.length, 
+    ropeRadius * 0.8,
+    12,
+    false
+  );
+  
+  const textureLoader = new THREE.TextureLoader();
+  const ropeTexture = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(16, 1);
   });
-}*/
+  
+  const material = new THREE.MeshStandardMaterial({
+    map: ropeTexture,
+    roughness: 0.7,
+    metalness: 0.2,
+    side: THREE.DoubleSide
+  });
+  
+  floorCoilMesh = new THREE.Mesh(tubeGeometry, material);
+  floorCoilMesh.position.set(-0.55, 0, 0.035);
+  floorCoilMesh.castShadow = true;
+  floorCoilMesh.receiveShadow = true;
+  scene.add(floorCoilMesh);
+}
 
 function animate() {
   requestAnimationFrame(animate);
@@ -1063,18 +1211,13 @@ function animate() {
   try {
     const timeStep = 1/120;
     const subSteps = 10;
-    
     for (let i = 0; i < subSteps; i++) {
       world.step(timeStep / subSteps);
     }
-
     if (isPlaying) {
-      //applyRotationForceToRope();
-      
       const baseRotationSpeed = -2.8;
       const sizeRatio = 0.2 / coilerRadius;
       const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-      
       if (ropeBodies.length > 299) {
         isPlaying = false;
         coilerBody.angularVelocity.set(0, 0, 0);
@@ -1095,49 +1238,36 @@ function animate() {
         ropePoints.length = 0;
         ropePoints.push(...finalRopePoints);
       }
-
       if (coilerBody) {
         coilerBody.angularVelocity.set(0, 0, rotationSpeed);
       }
-      
       if (coilerBodySide1) {
         coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
       }
-      
       if (coilerBodySide2) {
         coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
       }
-      
       const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
-      
       if (coilerBodyMesh) {
         coilerBodyMesh.rotation.z -= visualRotation;
       }
-      
+      if (spoolModel && coilerBody && counterModel) {
+        spoolModel.rotation.y -= visualRotation;
+        floorCoilMesh.rotation.y -= visualRotation;
+      }
       if (coilerBodyMeshSide1) {
         coilerBodyMeshSide1.rotation.z -= visualRotation;
       }
-      
       if (coilerBodyMeshSide2) {
         coilerBodyMeshSide2.rotation.z -= visualRotation;
       }
-      
       if (movingModel) {
         movingModel.rotation.z += visualRotation;
       }
     }
-
-
     if (dummy) {
       dummy.getWorldPosition(temp);
-      
       if (anchorEnd) {
-        // REPLACE this interpolation code:
-        // anchorEnd.position.x = anchorEnd.position.x * 0.2 + temp.x * 0.8;
-        // anchorEnd.position.y = anchorEnd.position.y * 0.2 + temp.y * 0.8;
-        // anchorEnd.position.z = anchorEnd.position.z * 0.2 + temp.z * 0.8;
-        
-        // WITH direct position setting:
         anchorEnd.position.x = temp.x;
         anchorEnd.position.y = temp.y;
         anchorEnd.position.z = temp.z;
@@ -1152,31 +1282,11 @@ function animate() {
     }
 
     if (ropeBodies.length > 0) {
-      updateRopeCurve();
+      // Instead of rebuilding geometry, update existing vertex positions
       if (ropeMeshes.length > 0 && ropeMeshes[0]) {
-        const curve = new THREE.CatmullRomCurve3(ropePoints);
-        const oldmaterial = ropeMeshes[0].material;
-        ropeMeshes[0].geometry.dispose();
-
-        const tubeGeometry = new THREE.TubeGeometry(
-          curve,
-          Math.min(ropeBodies.length * 3, 120),
-          ropeRadius * 0.8,
-          12,
-          false
-        );
-
-        tubeGeometry.computeBoundingBox();
-        const boundingBox = tubeGeometry.boundingBox;
-        const size = new THREE.Vector3();
-        boundingBox.getSize(size);
-        const uvAttribute = tubeGeometry.attributes.uv;
-        for (let i = 0; i < uvAttribute.count; i++){
-          let u = uvAttribute.getX(i);
-          uvAttribute.set(i, u * size.length() * 0.5);
-        }
-        uvAttribute.needsUpdate = true;
-        ropeMeshes[0].geometry = tubeGeometry;
+        updateRopeGeometry();
+      } else {
+        createRopeMesh();
       }
     }
     if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
