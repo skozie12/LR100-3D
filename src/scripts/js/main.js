@@ -55,75 +55,23 @@ function createLogoFloor() {
     new THREE.BoxGeometry(4, 2, 0.06), 
     new THREE.MeshPhongMaterial({ color: 0xA9a9a9 })
   );
-  floor.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
+  floor.receiveShadow = true;
   floor.position.y = -0.77;
   floor.position.z = 0
   floor.rotateX(-Math.PI / 2);
   scene.add(floor);
-  /*
-  const floor2 = new THREE.Mesh(
-    new THREE.BoxGeometry(3.5, 1, 0.05), 
-    topMaterial // Changed from MeshPhongMaterial to use the logo texture
-  );
-  floor2.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
-  floor2.position.z = -2;
-  floor2.position.y = 0.2
-  scene.add(floor2);
-
- const wall = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 2, 0.05),
-    new THREE.MeshPhongMaterial({ color: 0xeaeaea })
-  );
-  wall.receiveShadow = true;
-  wall.position.z = -2.001; 
-  wall.position.y = 0.2;
-  wall.position
-  scene.add(wall);
-
-  const floor3 = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 2, 0.05), 
-    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
-  );
-  floor3.castShadow = true;
-  floor3.position.x = -2;
-  floor3.position.y = 0.2;
-  floor3.position.z = -1.025
-  floor3.rotateY(Math.PI / 2);
-  scene.add(floor3);
-
-  const floor4 = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 2, 0.05), 
-    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
-  );
-  floor4.castShadow = true;
-  floor4.position.x = 2;
-  floor4.position.y = 0.2;
-  floor4.position.z = -1.025
-  floor4.rotateY(Math.PI / 2);
-  scene.add(floor4);
-
-  const roof = new THREE.Mesh(
-    new THREE.BoxGeometry(4.05, 0.5, 0.05), 
-    new THREE.MeshPhongMaterial({ color: 0xEDCAA1 })
-  );
-  roof.recieveShadow = true;
-  roof.position.x = 0;
-  roof.position.y = 1.176;
-  roof.position.z = -1.776
-  roof.rotateX(Math.PI / 2);
-  scene.add(roof);
-  */
+  
   const boxGeometry = new THREE.BoxGeometry(2.25, 0.025, 0.75);
   const box = new THREE.Mesh(boxGeometry, materials);
   box.castShadow = true;
-  box.receiveShadow = true; // Add this
+  box.receiveShadow = true;
   box.position.y = -0.2;
   scene.add(box);
 
   const boxFix = new THREE.BoxGeometry(2.25, 0.022, 0.75);
   const box1 = new THREE.Mesh(boxFix, brownMaterial);
-  box1.castShadow = true; // Add this
-  box1.receiveShadow = true; // Add this
+  box1.castShadow = true;
+  box1.receiveShadow = true;
   box1.position.y = -0.2;
   scene.add(box1);
 
@@ -131,8 +79,8 @@ function createLogoFloor() {
   function makeLeg(x, z) {
     const leg = new THREE.Mesh(legGeo, legMaterial);
     leg.position.set(x, -0.5, z);
-    leg.castShadow = true; // Add this
-    leg.receiveShadow = true; // Add this
+    leg.castShadow = true;
+    leg.receiveShadow = true;
     scene.add(leg);
   }
   makeLeg(-0.95, -0.3);
@@ -367,7 +315,6 @@ function onDropdownChange() {
   }
 
   if (completeConfig()) {
-    // Auto-start the animation if all components are selected and not already playing
     if (!isPlaying) {
       isPlaying = true;
       segmentTimer = setInterval(() => {
@@ -377,7 +324,6 @@ function onDropdownChange() {
       }, 125);
     }
   } else {
-    // Stop the animation if components are deselected
     if (isPlaying) {
       isPlaying = false;
       clearInterval(segmentTimer);
@@ -399,8 +345,6 @@ function checkAndCreateRope() {
     if (ropeBodies.length === 0) {
       console.log("Creating rope - all components selected");
       createRopeSegments();
-      
-      // Auto-start animation when rope is first created
       if (!isPlaying) {
         isPlaying = true;
         segmentTimer = setInterval(() => {
@@ -420,30 +364,22 @@ function checkAndCreateRope() {
 
 function createRopeSegments() {
   resetRope();
-  
-  // Start with the initial rope bodies
   for (let i = 0; i < segmentCount; i++) {
     const sphereShape = new Sphere(segmentWidth / 2);
-    
-    // Create starting positions along a path from start to end
     const t = i / (segmentCount - 1);
     let x, y, z;
     
     if (i <= midRope) {
-      // First section: from anchorStart to anchor (midpoint)
       const segT = i / midRope;
       x = anchorStart.position.x + segT * (anchor.position.x - anchorStart.position.x);
       y = anchorStart.position.y + segT * (anchor.position.y - anchorStart.position.y);
       z = anchorStart.position.z + segT * (anchor.position.z - anchorStart.position.z);
-      // Add slight curve
       y += Math.sin(segT * Math.PI) * 0.05;
     } else {
-      // Second section: from anchor (midpoint) to anchorEnd
       const segT = (i - midRope) / (segmentCount - midRope - 1);
       x = anchor.position.x + segT * (anchorEnd.position.x - anchor.position.x);
       y = anchor.position.y + segT * (anchorEnd.position.y - anchor.position.y);
       z = anchor.position.z + segT * (anchorEnd.position.z - anchorEnd.position.z);
-      // Add slight curve
       y += Math.sin(segT * Math.PI) * 0.05;
     }
     
@@ -462,7 +398,6 @@ function createRopeSegments() {
     ropeBodies.push(segmentBody);
   }
 
-  // Create constraints between segments more efficiently
   for (let i = 0; i < segmentCount - 1; i++) {
     const constraint = new DistanceConstraint(
       ropeBodies[i], 
@@ -475,7 +410,6 @@ function createRopeSegments() {
     world.addConstraint(constraint);
   }
 
-  // Connect to anchor points - more direct approach
   const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
   world.addConstraint(anchorConstraint);
 
@@ -485,7 +419,6 @@ function createRopeSegments() {
   const anchorEndConstraint = new DistanceConstraint(anchorEnd, ropeBodies[segmentCount - 1], 0);
   world.addConstraint(anchorEndConstraint);
   
-  // Pre-create the visual mesh immediately
   createRopeMesh();
 }
 
@@ -599,20 +532,16 @@ function createRopeMesh(){
 
   updateRopeCurve();
   const curve = new THREE.CatmullRomCurve3(ropePoints); 
-  
-  // Store the curve reference for later updates
   window.ropeCurve = curve;
   
-  // Create geometry with moderate resolution for first render
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 4, // Lower initial resolution for better performance
+    segmentCount * 4, 
     ropeRadius * 0.8,
-    16, // Reduced from 32 for better performance
+    16, 
     false
   );
   
-  // Store the parameters used for later updates
   tubeGeometry.userData = {
     tubularSegments: segmentCount * 4,
     radius: ropeRadius * 0.8,
@@ -676,7 +605,7 @@ function createRopeMesh(){
 
   const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
   tubeMesh.castShadow = true;
-  tubeMesh.receiveShadow = true; // Fixed typo: recieveShadow -> receiveShadow
+  tubeMesh.receiveShadow = true; 
   scene.add(tubeMesh);
   ropeMeshes.push(tubeMesh);
   if (!renderer.shadowMap.enabled) {
@@ -921,12 +850,10 @@ function createCoiler() {
     const bumpShape = new Sphere(bumpRadius);
     coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
-  
-  // Adjust y-coordinate to match model position (0.225 instead of 0.01)
   coilerBody.position.set(0.57, 0.225, config.zOffset);
   world.addBody(coilerBody);
 
-  /*
+  /* Visual Meshes for Coiler Physics Objects
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -983,7 +910,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  // Adjust y-coordinate to match model position
+  
   coilerBodySide1.position.set(0.57, 0.225, config.sideOffset1);
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
@@ -994,7 +921,7 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  // Adjust y-coordinate to match model position
+  
   coilerBodySide2.position.set(0.57, 0.225, config.sideOffset2);
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
@@ -1025,12 +952,10 @@ function createCoilerSides() {
   });
 
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
-  // Adjust y-coordinate to match model position
   coilerBodyMeshSide1.position.set(0.57, 0.225, config.sideOffset1);
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
-  // Adjust y-coordinate to match model position
   coilerBodyMeshSide2.position.set(0.57, 0.225, config.sideOffset2);
   scene.add(coilerBodyMeshSide2);
 }
@@ -1054,52 +979,6 @@ function loadSpoolFromMovingAssets() {
     },
   );
 }
-/*
-let benchModel = null;
-loader.load(
-  './assets/table.gltf',
-  (gltf) => {
-    benchModel = gltf.scene;
-    benchModel.position.set(-1.8, -0.6, -1.35);
-    benchModel.scale.set(0.4, 0.4, 0.4);
-    benchModel.rotation.y = (Math.PI / 2);
-    scene.add(benchModel);
-  }
-);
-let benchModel2 = null;
-loader.load(
-  './assets/table.gltf',
-  (gltf) => {
-    benchModel2 = gltf.scene;
-    benchModel2.position.set(-1, -0.6, -1.8);
-    benchModel2.scale.set(0.4, 0.4, 0.4);
-    scene.add(benchModel2);
-  }
-);
-let toolbox = null;
-loader.load(
-  './assets/toolbox.gltf',
-  (gltf) => {
-    toolbox = gltf.scene;
-    toolbox.position.set(1.6, -0.69, -1.8);
-    toolbox.scale.set(0.4, 0.4, 0.4);
-    scene.add(toolbox);
-  }
-);
-
-let model1410 = null;
-loader.load(
-  './assets/100-10-STAND.gltf',
-  (gltf) => {
-    model1410 = gltf.scene;
-    model1410.position.set(-0.5, -0.83, -1.71);
-    model1410.rotation.x = (Math.PI / 2);
-    model1410.rotation.z = (Math.PI / 2.5);
-    model1410.rotation.y = (Math.PI / 1.02);
-    scene.add(model1410);
-  }
-);
-*/
 
 let floorCoilMesh = null;
 function createFloorCoil() {
@@ -1225,14 +1104,13 @@ function animate() {
         anchorEnd.angularVelocity.set(0, 0, 0);
         const lastSegmentCount = 10;
         for (let i = Math.max(0, ropeBodies.length - lastSegmentCount); i < ropeBodies.length; i++) {
-          ropeBodies[i].velocity.scale(0.9); // Add stronger damping
+          ropeBodies[i].velocity.scale(0.9);
           ropeBodies[i].angularVelocity.scale(0.9);
         }
       }
     }
 
     if (ropeBodies.length > 0) {
-      // Instead of rebuilding geometry, update existing vertex positions
       if (ropeMeshes.length > 0 && ropeMeshes[0]) {
         updateRopeGeometry();
       } else {
@@ -1249,7 +1127,6 @@ function animate() {
   }
 }
 animate();
-
 setTimeout(() => {
   checkAndCreateRope();
 }, 1000);
