@@ -269,6 +269,14 @@ function onDropdownChange() {
       disposeModel(spoolModel);
       spoolModel = null;
     }
+
+    if (floorCoilMesh) {
+      scene.remove(floorCoilMesh);
+      floorCoilMesh.geometry.dispose();
+      floorCoilMesh.material.dispose();
+      floorCoilMesh = null;
+    }
+    
     if (reelValue) {
       loadCombo(reelValue, (model) => {
         reelModel = model;
@@ -692,88 +700,53 @@ function createRopeMesh(){
   }
 }
 
-// Add a new function to update the rope geometry directly
 function updateRopeGeometry() {
   if (ropeMeshes.length === 0 || !ropeMeshes[0]) return;
-  
   const mesh = ropeMeshes[0];
   const geometry = mesh.geometry;
-  
   if (!geometry || !geometry.userData) return;
-  
-  // Update curve with new points
   updateRopeCurve();
   const curve = new THREE.CatmullRomCurve3(ropePoints);
   window.ropeCurve = curve;
-  
-  // Get parameters from stored userData
   const { tubularSegments, radius, radialSegments } = geometry.userData;
-  
-  // Access position attribute directly
   const positionAttr = geometry.attributes.position;
   if (!positionAttr) return;
-  
-  // Get vertices as Vector3
-  const up = new THREE.Vector3(0, 1, 0);
   const frames = curve.computeFrenetFrames(tubularSegments, false);
-  
-  // Position and normal variables
   const vertex = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  
-  // Rebuild vertices without recreating geometry
   let idx = 0;
-  
-  // For each tube segment
   for (let i = 0; i <= tubularSegments; i++) {
-    // Get current point on curve
     const u = i / tubularSegments;
     const point = curve.getPointAt(u);
     const tangent = curve.getTangentAt(u);
-    
-    // Calculate normal and binormal
     const N = frames.normals[i];
     const B = frames.binormals[i];
-    
-    // For each vertex in the tube's circumference
     for (let j = 0; j <= radialSegments; j++) {
-      // Calculate angle for this radial vertex
       const v = j / radialSegments * Math.PI * 2;
       const sin = Math.sin(v);
       const cos = -Math.cos(v);
-      
-      // Calculate vertex position
       normal.x = cos * N.x + sin * B.x;
       normal.y = cos * N.y + sin * B.y;
       normal.z = cos * N.z + sin * B.z;
       normal.multiplyScalar(radius);
-      
       vertex.copy(point).add(normal);
-      
-      // Update position data
       positionAttr.setXYZ(idx, vertex.x, vertex.y, vertex.z);
       idx++;
     }
   }
-  
-  // Mark attributes as needing update
   positionAttr.needsUpdate = true;
-  
-  // Update bounding box for proper rendering
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
 }
 
-const endOfRope = ropeBodies[segmentCount - 1];
 const midRope = 10;
-
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.01, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
 
 const anchorStart = new Body({ mass: 0 });
-anchorStart.position.set(-0.6, 0.07, 0.03);
+anchorStart.position.set(-0.6, 0.07, -0.058);
 world.addBody(anchorStart);
 
 const anchor = new Body({ mass: 0 });
@@ -786,14 +759,7 @@ function addRopeSegment(){
   try {
     if (ropeBodies.length >= 300) return;
     if (ropeBodies.length < 11) return;
-    
-    // Instead of inserting at position 11 and shifting the entire array,
-    // we'll use a ring buffer approach with a fixed insertion point
-    
-    // Track fixed anchor points
     const anchorEndIndex = ropeBodies.length - 1;
-    
-    // Create the new segment based on position 10
     const baseSegment = ropeBodies[10];
     const newBody = new Body({ 
       mass: segmentMass, 
@@ -824,14 +790,8 @@ function addRopeSegment(){
     
     newBody.angularDamping = 0.95;
     newBody.linearDamping = 0.95;
-    
-    // Add the new body to the world
     world.addBody(newBody);
-    
-    // Store all constraints that need to be updated
     const constraintsToUpdate = [];
-    
-    // Find and store all constraints connected to position 10 & 11
     world.constraints.forEach((constraint) => {
       if ((constraint.bodyA === ropeBodies[10] && constraint.bodyB === ropeBodies[11]) ||
           (constraint.bodyA === ropeBodies[11] && constraint.bodyB === ropeBodies[10])) {
@@ -839,11 +799,7 @@ function addRopeSegment(){
         world.removeConstraint(constraint);
       }
     });
-    
-    // Get reference to position 11 before we change the array
     const nextBody = ropeBodies[11];
-    
-    // Update tracking counters for zigzag pattern
     if (!window.addedSegments) window.addedSegments = 0;
     window.addedSegments++;
     
@@ -860,14 +816,12 @@ function addRopeSegment(){
     const maxZ = zRange * 0.45;
     window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
     
-    // Add to array using push instead of splice for better performance
-    // We'll rearrange the array more efficiently
     const tailSegments = ropeBodies.slice(11);
-    ropeBodies.length = 11; // Truncate the array
-    ropeBodies.push(newBody); // Add new segment
-    ropeBodies.push(...tailSegments); // Re-add tail segments
+    ropeBodies.length = 11; 
+    ropeBodies.push(newBody); 
+    ropeBodies.push(...tailSegments); 
     
-    // Create constraints for the new segment
+
     const constraintPrev = new DistanceConstraint(ropeBodies[10], newBody, segmentDistance, 1e5);
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
     constraintPrev.collideConnected = false;
@@ -877,9 +831,8 @@ function addRopeSegment(){
     world.addConstraint(constraintPrev);
     world.addConstraint(constraintNext);
     
-    // Update the constraint to the end anchor if needed
+
     if (anchorEndIndex === ropeBodies.length - 2) {
-      // We need to update the end anchor constraint
       world.constraints.forEach((constraint) => {
         if (constraint instanceof DistanceConstraint && 
             (constraint.bodyA === anchorEnd || constraint.bodyB === anchorEnd)) {
@@ -1091,6 +1044,7 @@ let spoolModel = null;
 function loadSpoolFromMovingAssets() {
   if (spoolModel) {
     disposeModel(spoolModel);
+
     spoolModel = null;
   }
   loader.load(
@@ -1160,9 +1114,9 @@ function createFloorCoil() {
   }
 
   const points = [];
-  const coilRadius = 0.1;
-  const coilHeight = 0.21;
-  const turns = 22;
+  const coilRadius = 0.12;
+  const coilHeight = 0.23;
+  const turns = 25;
   const pointsPerTurn = 24;
   
   for (let i = 0; i <= turns * pointsPerTurn; i++) {
