@@ -8,8 +8,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
 
 const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
-camera.position.set(0, 1, 5);
-camera.zoom = 5;
+camera.position.set(0, 2, 5);
+camera.zoom = 4;
 camera.updateProjectionMatrix();
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -52,12 +52,12 @@ function createLogoFloor() {
   const materials = [brownMaterial, brownMaterial, topMaterial, brownMaterial, brownMaterial, brownMaterial];
 
   const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 2.5, 0.06), 
+    new THREE.BoxGeometry(4, 2, 0.06), 
     new THREE.MeshPhongMaterial({ color: 0xA9a9a9 })
   );
   floor.receiveShadow = true; // Fix typo: recieveShadow → receiveShadow
   floor.position.y = -0.77;
-  floor.position.z = -0.75
+  floor.position.z = 0
   floor.rotateX(-Math.PI / 2);
   scene.add(floor);
   /*
@@ -113,38 +113,36 @@ function createLogoFloor() {
   roof.rotateX(Math.PI / 2);
   scene.add(roof);
   */
-  const boxGeometry = new THREE.BoxGeometry(2, 0.025, 0.5);
+  const boxGeometry = new THREE.BoxGeometry(2.25, 0.025, 0.75);
   const box = new THREE.Mesh(boxGeometry, materials);
   box.castShadow = true;
   box.receiveShadow = true; // Add this
-  box.position.y = -0.41;
+  box.position.y = -0.2;
   scene.add(box);
 
-  const boxFix = new THREE.BoxGeometry(2, 0.022, 0.5);
+  const boxFix = new THREE.BoxGeometry(2.25, 0.022, 0.75);
   const box1 = new THREE.Mesh(boxFix, brownMaterial);
   box1.castShadow = true; // Add this
   box1.receiveShadow = true; // Add this
-  box1.position.y = -0.41;
+  box1.position.y = -0.2;
   scene.add(box1);
 
-  const legGeo = new THREE.BoxGeometry(0.06, 0.35, 0.06);
+  const legGeo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
   function makeLeg(x, z) {
     const leg = new THREE.Mesh(legGeo, legMaterial);
-    leg.position.set(x, -0.59, z);
+    leg.position.set(x, -0.5, z);
     leg.castShadow = true; // Add this
     leg.receiveShadow = true; // Add this
     scene.add(leg);
   }
-  makeLeg(-0.95, -0.2);
-  makeLeg(-0.95,  0.2);
-  makeLeg( 0.95, -0.2);
-  makeLeg( 0.95,  0.2);
+  makeLeg(-0.95, -0.3);
+  makeLeg(-0.95,  0.3);
+  makeLeg( 0.95, -0.3);
+  makeLeg( 0.95,  0.3);
 }
 createLogoFloor();
 
 const canvasOverlay = document.getElementById('canvas-overlay');
-const playBtn = document.getElementById('playBtn');
-const pauseBtn = document.getElementById('pauseBtn');
 const priceDisplay = document.getElementById('price-display');
 
 function onCanvasClick(){
@@ -156,25 +154,6 @@ renderer.domElement.addEventListener('pointerdown', onCanvasClick);
 let isPlaying = false;
 let isPaused = false;
 let segmentTimer = null;
-
-function onPlayClick() {
-  if (!isPlaying) { 
-    isPlaying = true;
-    segmentTimer = setInterval(() => {
-      if (isPlaying) {
-        addRopeSegment();
-      }
-    }, 125);
-  }
-}
-playBtn.addEventListener('pointerdown', onPlayClick);
-
-function onPauseClick(){
-  isPlaying = false;
-  isPaused = true;
-  clearInterval(segmentTimer);
-}
-pauseBtn.addEventListener('pointerdown', onPauseClick);
 
 const loader = new GLTFLoader();
 
@@ -209,7 +188,7 @@ function loadCombo(fileName, onLoad) {
       const model = gltf.scene;
       model.rotation.y = Math.PI;
       model.position.x = 0.57;
-      model.position.y = 0.01;
+      model.position.y = 0.225;
       scene.add(model);
       if (onLoad) onLoad(model);
     },
@@ -276,7 +255,7 @@ function onDropdownChange() {
       floorCoilMesh.material.dispose();
       floorCoilMesh = null;
     }
-    
+
     if (reelValue) {
       loadCombo(reelValue, (model) => {
         reelModel = model;
@@ -387,15 +366,22 @@ function onDropdownChange() {
     }
   }
 
-  if (coilerValue) {
-    playBtn.style.visibility = 'visible';
-    pauseBtn.style.visibility = 'visible';
+  if (completeConfig()) {
+    // Auto-start the animation if all components are selected and not already playing
+    if (!isPlaying) {
+      isPlaying = true;
+      segmentTimer = setInterval(() => {
+        if (isPlaying) {
+          addRopeSegment();
+        }
+      }, 125);
+    }
   } else {
-    playBtn.style.visibility = 'hidden';
-    pauseBtn.style.visibility = 'hidden';
-
+    // Stop the animation if components are deselected
     if (isPlaying) {
       isPlaying = false;
+      clearInterval(segmentTimer);
+      segmentTimer = null;
     }
   }
 
@@ -403,14 +389,6 @@ function onDropdownChange() {
   oldCounterValue = counterValue;
   oldCoilerValue = coilerValue;
   oldCutterValue = cutterValue;
-  
-  if (coilerValue) {
-    playBtn.style.visibility = 'visible';
-    pauseBtn.style.visibility = 'visible';
-  } else {
-    playBtn.style.visibility = 'hidden';
-    pauseBtn.style.visibility = 'hidden';
-  }
   
   updatePrice();
   checkAndCreateRope();
@@ -421,6 +399,16 @@ function checkAndCreateRope() {
     if (ropeBodies.length === 0) {
       console.log("Creating rope - all components selected");
       createRopeSegments();
+      
+      // Auto-start animation when rope is first created
+      if (!isPlaying) {
+        isPlaying = true;
+        segmentTimer = setInterval(() => {
+          if (isPlaying) {
+            addRopeSegment();
+          }
+        }, 125);
+      }
     }
   } else {
     if (ropeBodies.length > 0) {
@@ -741,16 +729,16 @@ function updateRopeGeometry() {
 
 const midRope = 10;
 const anchorEnd = new Body({ mass: 0 });
-anchorEnd.position.set(0.57, 0.01, 0.025);
+anchorEnd.position.set(0.57, 0.225, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
 world.addBody(anchorEnd);
 
 const anchorStart = new Body({ mass: 0 });
-anchorStart.position.set(-0.6, 0.07, -0.058);
+anchorStart.position.set(-0.6, 0.27, -0.058);
 world.addBody(anchorStart);
 
 const anchor = new Body({ mass: 0 });
-anchor.position.set(0, 0.075, 0.03);
+anchor.position.set(0, 0.3, 0.03);
 world.addBody(anchor);
 
 const ropeMeshes = [];
@@ -934,9 +922,11 @@ function createCoiler() {
     coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
   
-  coilerBody.position.set(0.57, 0.01, config.zOffset);
+  // Adjust y-coordinate to match model position (0.225 instead of 0.01)
+  coilerBody.position.set(0.57, 0.225, config.zOffset);
   world.addBody(coilerBody);
 
+  /*
   const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
   cylinderGeo.rotateZ(Math.PI / 2); 
   cylinderGeo.rotateY(Math.PI / 2); 
@@ -949,8 +939,9 @@ function createCoiler() {
   });
 
   coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
-  coilerBodyMesh.position.set(0.57, 0.01, config.zOffset);
+  coilerBodyMesh.position.set(0.57, 0.225, config.zOffset);
   scene.add(coilerBodyMesh);
+  */
 }
 
 function createCoilerSides() {
@@ -992,7 +983,8 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide1.position.set(0.57, 0.01, config.sideOffset1);
+  // Adjust y-coordinate to match model position
+  coilerBodySide1.position.set(0.57, 0.225, config.sideOffset1);
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
 
@@ -1002,7 +994,8 @@ function createCoilerSides() {
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  coilerBodySide2.position.set(0.57, 0.01, config.sideOffset2);
+  // Adjust y-coordinate to match model position
+  coilerBodySide2.position.set(0.57, 0.225, config.sideOffset2);
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
   
@@ -1020,6 +1013,7 @@ function createCoilerSides() {
     16, 
     1
   );
+
   cylinderGeoSide1.rotateX(Math.PI / 2);
   cylinderGeoSide2.rotateX(Math.PI / 2);
 
@@ -1031,11 +1025,13 @@ function createCoilerSides() {
   });
 
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
-  coilerBodyMeshSide1.position.set(0.57, 0.01, config.sideOffset1);
+  // Adjust y-coordinate to match model position
+  coilerBodyMeshSide1.position.set(0.57, 0.225, config.sideOffset1);
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
-  coilerBodyMeshSide2.position.set(0.57, 0.01, config.sideOffset2);
+  // Adjust y-coordinate to match model position
+  coilerBodyMeshSide2.position.set(0.57, 0.225, config.sideOffset2);
   scene.add(coilerBodyMeshSide2);
 }
 
@@ -1051,14 +1047,14 @@ function loadSpoolFromMovingAssets() {
     `./assets/284-SPOOL.gltf`,
     (gltf) => {
       spoolModel = gltf.scene;
-      spoolModel.position.set(-0.55, -0.06, 0.035);
+      spoolModel.position.set(-0.55, 0.16, 0.035);
       spoolModel.scale.set(11, 11, 11);
       scene.add(spoolModel);
       createFloorCoil();
     },
   );
 }
-
+/*
 let benchModel = null;
 loader.load(
   './assets/table.gltf',
@@ -1103,6 +1099,7 @@ loader.load(
     scene.add(model1410);
   }
 );
+*/
 
 let floorCoilMesh = null;
 function createFloorCoil() {
@@ -1153,7 +1150,7 @@ function createFloorCoil() {
   });
   
   floorCoilMesh = new THREE.Mesh(tubeGeometry, material);
-  floorCoilMesh.position.set(-0.55, 0, 0.035);
+  floorCoilMesh.position.set(-0.55, 0.21, 0.035);
   floorCoilMesh.castShadow = true;
   floorCoilMesh.receiveShadow = true;
   scene.add(floorCoilMesh);
@@ -1188,7 +1185,6 @@ function animate() {
           world.removeBody(ropeBodies[i]);
         }
         ropeBodies.length = 0;
-        const finalCurve = new THREE.CatmullRomCurve3(finalRopePoints);
         ropePoints.length = 0;
         ropePoints.push(...finalRopePoints);
       }
