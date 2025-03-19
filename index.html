@@ -38,8 +38,8 @@
     <label for="counterSelect">Counter:</label>
     <select id="counterSelect">
       <option value="">-- Select Counter --</option>
-      <option value="1410.gltf" id="1410">Footage Counter (1410)</option>
-      <option value="1410.gltf" id="1420">Metric Counter (1420)</option>
+      <option value="1410.gltf" id="1410">Footage Counter</option>
+      <option value="1410.gltf" id="1420">Metric Counter</option>
       <option value="1410.gltf" id="1410UR">Footage Counter with UR Wheels</option>
       <option value="1410.gltf" id="1420UR">Metric Counter with UR Wheels</option>
     </select>
@@ -53,33 +53,12 @@
     <button class="add-to-cart" id="addBtn">Add to cart</button>
     <div id="price-display"></div>
   </div>
-  
-  <!-- Play/pause buttons -->
-  <button class="play-animation" id="playBtn">▶</button>
-  <button class="pause-animation" id="pauseBtn">||</button>
-  
-  <!-- Footer text -->
   <div class="footer-text footer-left">
     Note: LR100-284 does not include a spool, colours are subject to change
   </div>
-  
   <div class="footer-text footer-right">
     © 2025 Taymer International, Inc. All rights reserved.
   </div>
-  
-  <!-- Load Ammo.js with explicit WASM support -->
-  <script>
-    // Pre-configure Ammo to use wasm for better performance
-    var AmmoConfig = {
-      locateFile: function(path) {
-        if(path.endsWith('.wasm')) {
-          return 'https://cdn.jsdelivr.net/npm/ammo.js@0.0.2/builds/ammo.wasm';
-        }
-        return path;
-      }
-    };
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/ammo.js@0.0.2/builds/ammo.js"></script>
   <script type="module" src="./src/scripts/js/main.js"></script>
 </body>
 </html>
