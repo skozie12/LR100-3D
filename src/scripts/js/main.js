@@ -7,6 +7,7 @@ import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, Distanc
 let physicsWorker = null;
 let ropePositions = [];
 let useWorker = false; // Start with false, enable after initialization
+let ropeFinalized = false; // Add a new flag to track finalized state
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -25,7 +26,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.05;
+controls.dampingFactor = 0.1;
 controls.maxPolarAngle = Math.PI / 2;
 controls.minDistance = 1;
 controls.maxDistance = 10;
@@ -73,6 +74,8 @@ function initPhysicsWorker() {
           case 'ropeReset':
             console.log('Rope reset in worker');
             ropePositions = [];
+            ropeFinalized = false; // Ensure the flag is reset
+            
             if (ropeMeshes.length > 0) {
               ropeMeshes.forEach(mesh => {
                 scene.remove(mesh);
@@ -87,11 +90,24 @@ function initPhysicsWorker() {
             console.log('Segment limit reached, rope physics made static');
             ropePositions = positions;
             isPlaying = false;
+            ropeFinalized = true; // Set our flag here as well
+            
             if (segmentTimer) {
               clearInterval(segmentTimer);
               segmentTimer = null;
             }
             // Update UI or show a message if needed
+            break;
+            
+          case 'ropeFinalized':
+            console.log('Rope finalized in worker');
+            ropePositions = positions;
+            ropeFinalized = true; // Mark as finalized
+            
+            // Final update of the rope mesh
+            if (ropePositions.length > 0 && ropeMeshes.length > 0) {
+              updateRopeGeometryFromWorker();
+            }
             break;
         }
       };
@@ -315,6 +331,34 @@ let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 let activeCoilerType = "100-10";
 
+// Add this function to ensure complete reset when coiler changes
+function resetRopeCompletely() {
+  console.log("Complete rope reset - forced");
+  ropeFinalized = false;
+  isPlaying = false;
+  
+  if (useWorker && physicsWorker) {
+    physicsWorker.postMessage({ type: 'resetRope' });
+    ropePositions = [];
+    
+    if (ropeMeshes.length > 0) {
+      ropeMeshes.forEach(mesh => {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      });
+      ropeMeshes.length = 0;
+    }
+  } else {
+    resetRope();
+  }
+  
+  if (segmentTimer) {
+    clearInterval(segmentTimer);
+    segmentTimer = null;
+  }
+}
+
 function onDropdownChange() {
   const reelValue = reelSelect.value;
   const counterValue = counterSelect.value;
@@ -378,13 +422,8 @@ function onDropdownChange() {
     disposeModel(movingModel);
     movingModel = null;
     
-    // Make sure to reset rope through worker if useWorker is true
-    if (useWorker && physicsWorker) {
-      physicsWorker.postMessage({ type: 'resetRope' });
-      ropePositions = [];
-    } else {
-      resetRope();
-    }
+    // ALWAYS force a complete reset when coiler changes
+    resetRopeCompletely();
     
     if (coilerValue === '100-10.gltf') {
       activeCoilerType = "100-10";
@@ -468,9 +507,9 @@ function onDropdownChange() {
     if (!isPlaying) {
       isPlaying = true;
       segmentTimer = setInterval(() => {
-        if (isPlaying) {
+        if (isPlaying && completeConfig()) { // Only add segments if playing AND all components selected
           // Use worker or direct physics based on useWorker flag
-          if (useWorker && physicsWorker) {
+          if (useWorker && physicsWorker && !ropeFinalized) {
             physicsWorker.postMessage({ 
               type: 'addSegment',
               data: {
@@ -478,7 +517,7 @@ function onDropdownChange() {
                 activeCoilerType: activeCoilerType
               }
             });
-          } else {
+          } else if (!useWorker) {
             addRopeSegment();
           }
         }
@@ -489,6 +528,11 @@ function onDropdownChange() {
       isPlaying = false;
       clearInterval(segmentTimer);
       segmentTimer = null;
+      
+      // Stop coiler rotation if we're using the worker
+      if (useWorker && physicsWorker) {
+        physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+      }
     }
   }
 
@@ -503,15 +547,15 @@ function onDropdownChange() {
 
 function checkAndCreateRope() {
   if (completeConfig()) {
-    if (useWorker) {
-      if (ropePositions.length === 0) {
+    if (useWorker && physicsWorker) {
+      if (ropePositions.length === 0 && !ropeFinalized) {
         console.log("Creating rope - all components selected");
         physicsWorker.postMessage({ type: 'createRope' });
         
         if (!isPlaying) {
           isPlaying = true;
           segmentTimer = setInterval(() => {
-            if (isPlaying) {
+            if (isPlaying && completeConfig() && !ropeFinalized) {
               physicsWorker.postMessage({ 
                 type: 'addSegment',
                 data: {
@@ -693,7 +737,8 @@ world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMater
 });
 world.defaultMaterial = defaultMaterial;
 
-const segmentCount = 40;
+// Update segment count to 400
+const segmentCount = 40; // This stays the same - it's the initial segment count
 const segmentWidth = 0.012;
 const segmentMass = 0.5;
 const segmentDistance = 0.012;
@@ -874,9 +919,11 @@ world.addBody(anchor);
 
 const ropeMeshes = [];
 
+// Update addRopeSegment function to check for 400 segments
 function addRopeSegment(){
   try {
-    if (ropeBodies.length >= 300) return;
+    // Change 300 to 400 as the segment limit
+    if (ropeBodies.length >= 400) return;
     if (ropeBodies.length < 11) return;
     const anchorEndIndex = ropeBodies.length - 1;
     const baseSegment = ropeBodies[10];
@@ -983,6 +1030,7 @@ function resetRope(){
   if (useWorker && physicsWorker) {
     physicsWorker.postMessage({ type: 'resetRope' });
     ropePositions = [];
+    ropeFinalized = false; // Reset our flag
     
     if (ropeMeshes.length > 0) {
       ropeMeshes.forEach(mesh => {
@@ -1274,81 +1322,90 @@ function createFloorCoil() {
   scene.add(floorCoilMesh);
 }
 
+// Modify animate function to properly control coiler rotation and stop worker messages
 function animate() {
   requestAnimationFrame(animate);
   
   try {
     if (useWorker && physicsWorker) {
-      // Worker-based physics
-      if (isPlaying) {
-        const timeStep = 1/120;
-        const subSteps = 10;
+      // Check if we need to transition to static state
+      if (ropePositions.length > 399 && isPlaying) {
+        isPlaying = false;
+        ropeFinalized = true;
+
+        console.log('Rope reached max length, finalizing and stopping communication');
         
-        physicsWorker.postMessage({ 
-          type: 'step',
-          data: {
-            timeStep: timeStep,
-            subSteps: subSteps
-          }
-        });
+        // Final communication with worker
+        physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+        physicsWorker.postMessage({ type: 'finalizeRope' });
         
-        // Handle rotation visuals
-        const baseRotationSpeed = -2.8;
-        const sizeRatio = 0.2 / coilerRadius;
-        const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-        
-        if (ropePositions.length > 299) {
-          isPlaying = false;
-          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
-        } else if (isPlaying) {
-          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: rotationSpeed } });
-        }
-        
-        // Visual rotations
-        const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
-        if (coilerBodyMesh) {
-          coilerBodyMesh.rotation.z -= visualRotation;
-        }
-        if (spoolModel && counterModel) {
-          spoolModel.rotation.y -= visualRotation;
-          if (floorCoilMesh) floorCoilMesh.rotation.y -= visualRotation;
-        }
-        if (coilerBodyMeshSide1) {
-          coilerBodyMeshSide1.rotation.z -= visualRotation;
-        }
-        if (coilerBodyMeshSide2) {
-          coilerBodyMeshSide2.rotation.z -= visualRotation;
-        }
-        if (movingModel) {
-          movingModel.rotation.z += visualRotation;
+        if (segmentTimer) {
+          clearInterval(segmentTimer);
+          segmentTimer = null;
         }
       }
       
-      // Update dummy anchor position in worker
-      if (dummy) {
-        dummy.getWorldPosition(temp);
-        physicsWorker.postMessage({ 
-          type: 'updateAnchor',
-          data: {
-            x: temp.x,
-            y: temp.y,
-            z: temp.z
+      // Only communicate with worker if rope is NOT finalized
+      if (!ropeFinalized) {
+        // Worker-based physics - only if playing AND all components are selected
+        if (isPlaying && completeConfig()) {
+          const timeStep = 1/120;
+          const subSteps = 10;
+          
+          physicsWorker.postMessage({ 
+            type: 'step',
+            data: {
+              timeStep: timeStep,
+              subSteps: subSteps
+            }
+          });
+          
+          // Handle rotation visuals
+          const baseRotationSpeed = -2.8;
+          const sizeRatio = 0.2 / coilerRadius;
+          const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: rotationSpeed } });
+          
+          // Update dummy anchor position in worker ONLY if not finalized
+          if (dummy) {
+            dummy.getWorldPosition(temp);
+            physicsWorker.postMessage({ 
+              type: 'updateAnchor',
+              data: {
+                x: temp.x,
+                y: temp.y,
+                z: temp.z
+              }
+            });
           }
-        });
+        } else if (!isPlaying || !completeConfig()) {
+          // If not playing or not all components selected, stop coiler rotation
+          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+        }
+      }
+      
+      // Visual rotations happen regardless of whether we're communicating with the worker
+      if (isPlaying && completeConfig()) {
+        updateVisualRotations();
       }
     } else {
-      // Original direct physics code
+      // Direct physics code - no changes needed here
       const timeStep = 1/120;
       const subSteps = 10;
-      for (let i = 0; i < subSteps; i++) {
-        world.step(timeStep / subSteps);
-      }
-      // Rest of original physics and animation code
-      if (isPlaying) {
+      
+      // Only step physics if playing
+      if (isPlaying && completeConfig()) {
+        for (let i = 0; i < subSteps; i++) {
+          world.step(timeStep / subSteps);
+        }
+        
+        // Rest of physics animation code only if playing
         const baseRotationSpeed = -2.8;
         const sizeRatio = 0.2 / coilerRadius;
         const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-        if (ropeBodies.length > 299) {
+        
+        // Change 299 to 399 for the segment limit check
+        if (ropeBodies.length > 399) {
           isPlaying = false;
           coilerBody.angularVelocity.set(0, 0, 0);
           if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
@@ -1374,16 +1431,20 @@ function animate() {
             clearInterval(segmentTimer);
             segmentTimer = null;
           }
+        } else {
+          // Only set rotation if we're playing and not at the segment limit
+          if (coilerBody) {
+            coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+          }
+          if (coilerBodySide1) {
+            coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+          }
+          if (coilerBodySide2) {
+            coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+          }
         }
-        if (coilerBody) {
-          coilerBody.angularVelocity.set(0, 0, rotationSpeed);
-        }
-        if (coilerBodySide1) {
-          coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
-        }
-        if (coilerBodySide2) {
-          coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
-        }
+        
+        // Visual rotations only if playing
         const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
         if (coilerBodyMesh) {
           coilerBodyMesh.rotation.z -= visualRotation;
@@ -1402,6 +1463,8 @@ function animate() {
           movingModel.rotation.z += visualRotation;
         }
       }
+      
+      // Handle anchor position updates independently of play state
       if (dummy) {
         dummy.getWorldPosition(temp);
         anchorEnd.position.x = temp.x;
@@ -1415,6 +1478,8 @@ function animate() {
           ropeBodies[i].angularVelocity.scale(0.9);
         }
       }
+      
+      // Always update the rope geometry if we have bodies
       if (ropeBodies.length > 0) {
         if (ropeMeshes.length > 0 && ropeMeshes[0]) {
           updateRopeGeometry();
@@ -1422,18 +1487,43 @@ function animate() {
           createRopeMesh();
         }
       }
-      if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
-        createRopeMesh();
-      }
     }
+    
+    // Always update controls and render
     controls.update();
     renderer.render(scene, camera);
   } catch (err) {
     console.error("Error in animation loop:", err);
   }
 }
+
+function updateVisualRotations() {
+  const visualRotation = 0.016 * Math.min(0.2 / coilerRadius, 1.5);
+  
+  if (coilerBodyMesh) {
+    coilerBodyMesh.rotation.z -= visualRotation;
+  }
+  
+  if (spoolModel && counterModel) {
+    spoolModel.rotation.y -= visualRotation;
+    if (floorCoilMesh) floorCoilMesh.rotation.y -= visualRotation;
+  }
+  
+  if (coilerBodyMeshSide1) {
+    coilerBodyMeshSide1.rotation.z -= visualRotation;
+  }
+  
+  if (coilerBodyMeshSide2) {
+    coilerBodyMeshSide2.rotation.z -= visualRotation;
+  }
+  
+  if (movingModel) {
+    movingModel.rotation.z += visualRotation;
+  }
+}
+
 animate();
 
 setTimeout(() => {
   checkAndCreateRope();
-}, 1000);
+}, 2000);

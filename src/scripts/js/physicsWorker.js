@@ -25,6 +25,12 @@ let addedSegments = 0;
 let currentDirection = 1;
 let currentZ = 0;
 
+// Add at the top with other state variables
+let isRopeFinalized = false;
+
+// Add this flag at the top with other state variables
+let isAnimationStarted = false;
+
 // Initialize the physics world
 function initPhysics() {
   world = new World({
@@ -124,6 +130,8 @@ function createRopeSegments() {
 // Reset the rope physics
 function resetRope() {
   try {
+    isRopeFinalized = false; // Make sure flag is reset
+    
     for (let i = world?.constraints?.length - 1; i >= 0; i--) {
       if (world.constraints[i] instanceof DistanceConstraint) {
         world.removeConstraint(world.constraints[i]);
@@ -148,7 +156,8 @@ function resetRope() {
 // Add a new rope segment
 function addRopeSegment(coilerConfig, activeCoilerType) {
   try {
-    if (ropeBodies.length >= 300) return;
+    // Change 300 to 400 as the segment limit
+    if (ropeBodies.length >= 400) return;
     if (ropeBodies.length < 11) return;
     
     const anchorEndIndex = ropeBodies.length - 1;
@@ -362,9 +371,11 @@ function setCoilerRotation(rotationSpeed) {
   }
 }
 
-// Add this new function to convert all rope bodies to static
+// Update makeRopeBodiesStatic function to set the flag
 function makeRopeBodiesStatic() {
   console.log('Converting rope bodies to static');
+  isRopeFinalized = true; // Set flag when rope is finalized
+  
   for (let i = 0; i < ropeBodies.length; i++) {
     const body = ropeBodies[i];
     body.type = BODY_TYPES.STATIC;
@@ -395,8 +406,8 @@ function makeRopeBodiesStatic() {
 
 // Step the physics simulation
 function stepPhysics(timeStep, subSteps) {
-  // Check if we've hit the segment limit
-  if (ropeBodies.length >= 300) {
+  // Change 300 to 400 as the segment limit
+  if (ropeBodies.length >= 400) {
     // Convert all rope bodies to static first time we hit the limit
     if (ropeBodies[0].type !== BODY_TYPES.STATIC) {
       makeRopeBodiesStatic();
@@ -417,11 +428,30 @@ function stepPhysics(timeStep, subSteps) {
   return positions;
 }
 
-// Handle messages from main thread
+// Update message handler to respect the finalized state
 self.onmessage = function(e) {
   try {
     const { type, data } = e.data;
-    console.log(`Worker received message: ${type}`);
+    
+    // Always process these message types even if rope is finalized
+    const criticalMessages = ['resetRope', 'init', 'finalizeRope'];
+    
+    // Set animation started flag when creating rope (which only happens when all components are selected)
+    if (type === 'createRope') {
+      isAnimationStarted = true;
+    } else if (type === 'resetRope') {
+      isAnimationStarted = false;
+    }
+    
+    // Only log received messages when animation has started or it's a critical message
+    if ((isAnimationStarted && !isRopeFinalized) || criticalMessages.includes(type)) {
+      console.log(`Worker received message: ${type}`);
+    }
+    
+    // Skip most message types if rope is finalized
+    if (isRopeFinalized && !criticalMessages.includes(type)) {
+      return; // Silently ignore non-critical messages when rope is finalized
+    }
     
     switch (type) {
       case 'init':
@@ -448,6 +478,7 @@ self.onmessage = function(e) {
       case 'resetRope':
         console.log('Worker resetting rope');
         resetRope();
+        isRopeFinalized = false; // Reset finalized flag
         self.postMessage({ type: 'ropeReset' });
         break;
         
@@ -461,13 +492,13 @@ self.onmessage = function(e) {
       case 'addSegment':
         console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}`);
         
-        // Don't add more segments if we've reached the limit
-        if (ropeBodies.length < 300) {
+        // Change 300 to 400 as the segment limit
+        if (ropeBodies.length < 400) {
           addRopeSegment(data.coilerConfig, data.activeCoilerType);
         }
         
-        // If we just hit the limit, make bodies static
-        if (ropeBodies.length >= 300 && ropeBodies[0].type !== BODY_TYPES.STATIC) {
+        // Change 300 to 400 as the segment limit
+        if (ropeBodies.length >= 400 && ropeBodies[0].type !== BODY_TYPES.STATIC) {
           makeRopeBodiesStatic();
         }
         
@@ -478,8 +509,8 @@ self.onmessage = function(e) {
         }));
         console.log(`Worker now has ${segmentPositions.length} segments`);
         
-        // Send message about reaching limit if needed
-        if (ropeBodies.length >= 300) {
+        // Change 300 to 400 as the segment limit
+        if (ropeBodies.length >= 400) {
           self.postMessage({ 
             type: 'segmentLimitReached',
             positions: segmentPositions 
@@ -506,6 +537,22 @@ self.onmessage = function(e) {
           type: 'stepped',
           positions: positions,
           count: ropeBodies.length
+        });
+        break;
+        
+      case 'finalizeRope':
+        console.log('Worker finalizing rope');
+        makeRopeBodiesStatic(); // This will set isRopeFinalized = true
+        
+        const finalPositions = ropeBodies.map(body => ({
+          x: body.position.x,
+          y: body.position.y,
+          z: body.position.z
+        }));
+        
+        self.postMessage({ 
+          type: 'ropeFinalized',
+          positions: finalPositions
         });
         break;
     }
