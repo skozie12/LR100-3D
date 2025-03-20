@@ -3,6 +3,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
 
+// Add these variables at the top of the file
+let physicsWorker = null;
+let ropePositions = [];
+let useWorker = false; // Start with false, enable after initialization
+
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
@@ -33,6 +38,84 @@ dirLight.position.set(0, 5, 4);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
+// Initialize the physics worker
+function initPhysicsWorker() {
+  if (window.Worker) {
+    try {
+      physicsWorker = new Worker(new URL('./physicsWorker.js', import.meta.url), { type: 'module' });
+      
+      physicsWorker.onmessage = function(e) {
+        const { type, positions, count, error } = e.data;
+        
+        switch(type) {
+          case 'initialized':
+            console.log('Physics worker initialized');
+            useWorker = true; // Only enable worker when initialization is confirmed
+            break;
+            
+          case 'ropeCreated':
+            console.log('Rope created in worker');
+            ropePositions = positions;
+            createRopeMesh();
+            break;
+            
+          case 'segmentAdded':
+            ropePositions = positions;
+            break;
+            
+          case 'stepped':
+            ropePositions = positions;
+            if (ropePositions.length > 0 && ropeMeshes.length > 0) {
+              updateRopeGeometryFromWorker();
+            }
+            break;
+            
+          case 'ropeReset':
+            console.log('Rope reset in worker');
+            ropePositions = [];
+            if (ropeMeshes.length > 0) {
+              ropeMeshes.forEach(mesh => {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                mesh.material.dispose();
+              });
+              ropeMeshes.length = 0;
+            }
+            break;
+            
+          case 'segmentLimitReached':
+            console.log('Segment limit reached, rope physics made static');
+            ropePositions = positions;
+            isPlaying = false;
+            if (segmentTimer) {
+              clearInterval(segmentTimer);
+              segmentTimer = null;
+            }
+            // Update UI or show a message if needed
+            break;
+        }
+      };
+      
+      physicsWorker.onerror = function(error) {
+        console.error("Physics worker error:", error);
+        useWorker = false; // Fall back to direct physics on error
+      };
+      
+      // Initialize the physics in the worker
+      physicsWorker.postMessage({ type: 'init' });
+    } catch (err) {
+      console.error("Failed to initialize physics worker:", err);
+      useWorker = false;
+    }
+  } else {
+    console.warn('Web Workers not supported in this browser. Using direct physics instead.');
+    useWorker = false;
+  }
+}
+
+// Initialize the worker
+initPhysicsWorker();
+
 window.addEventListener('resize', () => {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -41,11 +124,60 @@ window.addEventListener('resize', () => {
   renderer.setSize(width, height);
 });
 
-
+// New function to update rope geometry from worker positions
+function updateRopeGeometryFromWorker() {
+  if (ropeMeshes.length === 0 || !ropeMeshes[0]) return;
+  const mesh = ropeMeshes[0];
+  const geometry = mesh.geometry;
+  if (!geometry || !geometry.userData) return;
+  
+  // Convert worker positions to Three.js Vector3 objects
+  const points = ropePositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
+  
+  const curve = new THREE.CatmullRomCurve3(points);
+  window.ropeCurve = curve;
+  
+  const { tubularSegments, radius, radialSegments } = geometry.userData;
+  const positionAttr = geometry.attributes.position;
+  if (!positionAttr) return;
+  
+  const frames = curve.computeFrenetFrames(tubularSegments, false);
+  const vertex = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  
+  let idx = 0;
+  for (let i = 0; i <= tubularSegments; i++) {
+    const u = i / tubularSegments;
+    const point = curve.getPointAt(u);
+    const tangent = curve.getTangentAt(u);
+    const N = frames.normals[i];
+    const B = frames.binormals[i];
+    
+    for (let j = 0; j <= radialSegments; j++) {
+      const v = j / radialSegments * Math.PI * 2;
+      const sin = Math.sin(v);
+      const cos = -Math.cos(v);
+      
+      normal.x = cos * N.x + sin * B.x;
+      normal.y = cos * N.y + sin * B.y;
+      normal.z = cos * N.z + sin * B.z;
+      normal.multiplyScalar(radius);
+      
+      vertex.copy(point).add(normal);
+      positionAttr.setXYZ(idx, vertex.x, vertex.y, vertex.z);
+      idx++;
+    }
+  }
+  
+  positionAttr.needsUpdate = true;
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
 
 function createLogoFloor() {
   const textureLoader = new THREE.TextureLoader();
   const logoTexture = textureLoader.load('./assets/taymer_logo.png');
+  logoTexture.transparent = false; // Ensure it's not transparent
   const topMaterial = new THREE.MeshPhongMaterial({ map: logoTexture, transparent: true });
   const brownMaterial = new THREE.MeshPhongMaterial({ color: 0xD2B48C });
   const legMaterial = new THREE.MeshPhongMaterial({ color: 0xEDCAA1 });
@@ -211,7 +343,13 @@ function onDropdownChange() {
       });
       loadSpoolFromMovingAssets();
     } else {
-      resetRope();
+      // Make sure to reset rope through worker if useWorker is true
+      if (useWorker && physicsWorker) {
+        physicsWorker.postMessage({ type: 'resetRope' });
+        ropePositions = [];
+      } else {
+        resetRope();
+      }
     }
   }
 
@@ -224,7 +362,13 @@ function onDropdownChange() {
         checkAndCreateRope();
       });
     } else {
-      resetRope();
+      // Make sure to reset rope through worker if useWorker is true
+      if (useWorker && physicsWorker) {
+        physicsWorker.postMessage({ type: 'resetRope' });
+        ropePositions = [];
+      } else {
+        resetRope();
+      }
     }
   }
 
@@ -234,7 +378,13 @@ function onDropdownChange() {
     disposeModel(movingModel);
     movingModel = null;
     
-    resetRope();
+    // Make sure to reset rope through worker if useWorker is true
+    if (useWorker && physicsWorker) {
+      physicsWorker.postMessage({ type: 'resetRope' });
+      ropePositions = [];
+    } else {
+      resetRope();
+    }
     
     if (coilerValue === '100-10.gltf') {
       activeCoilerType = "100-10";
@@ -319,7 +469,18 @@ function onDropdownChange() {
       isPlaying = true;
       segmentTimer = setInterval(() => {
         if (isPlaying) {
-          addRopeSegment();
+          // Use worker or direct physics based on useWorker flag
+          if (useWorker && physicsWorker) {
+            physicsWorker.postMessage({ 
+              type: 'addSegment',
+              data: {
+                coilerConfig: COILER_CONFIG,
+                activeCoilerType: activeCoilerType
+              }
+            });
+          } else {
+            addRopeSegment();
+          }
         }
       }, 125);
     }
@@ -342,22 +503,54 @@ function onDropdownChange() {
 
 function checkAndCreateRope() {
   if (completeConfig()) {
-    if (ropeBodies.length === 0) {
-      console.log("Creating rope - all components selected");
-      createRopeSegments();
-      if (!isPlaying) {
-        isPlaying = true;
-        segmentTimer = setInterval(() => {
-          if (isPlaying) {
-            addRopeSegment();
-          }
-        }, 125);
+    if (useWorker) {
+      if (ropePositions.length === 0) {
+        console.log("Creating rope - all components selected");
+        physicsWorker.postMessage({ type: 'createRope' });
+        
+        if (!isPlaying) {
+          isPlaying = true;
+          segmentTimer = setInterval(() => {
+            if (isPlaying) {
+              physicsWorker.postMessage({ 
+                type: 'addSegment',
+                data: {
+                  coilerConfig: COILER_CONFIG,
+                  activeCoilerType: activeCoilerType
+                }
+              });
+            }
+          }, 125);
+        }
+      }
+    } else {
+      // Original code for direct physics
+      if (ropeBodies.length === 0) {
+        console.log("Creating rope - all components selected");
+        createRopeSegments();
+        if (!isPlaying) {
+          isPlaying = true;
+          segmentTimer = setInterval(() => {
+            if (isPlaying) {
+              addRopeSegment();
+            }
+          }, 125);
+        }
       }
     }
   } else {
-    if (ropeBodies.length > 0) {
-      console.log("Removing rope - not all components selected");
-      resetRope();
+    if (useWorker) {
+      if (ropePositions.length > 0) {
+        console.log("Removing rope - not all components selected");
+        physicsWorker.postMessage({ type: 'resetRope' });
+        ropePositions = [];
+      }
+    } else {
+      // Original code
+      if (ropeBodies.length > 0) {
+        console.log("Removing rope - not all components selected");
+        resetRope();
+      }
     }
   }
 }
@@ -530,8 +723,17 @@ function createRopeMesh(){
     ropeMeshes.length = 0;
   }
 
-  updateRopeCurve();
-  const curve = new THREE.CatmullRomCurve3(ropePoints); 
+  let points;
+  if (useWorker) {
+    points = ropePositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
+  } else {
+    updateRopeCurve();
+    points = ropePoints;
+  }
+  
+  if (!points || points.length === 0) return;
+  
+  const curve = new THREE.CatmullRomCurve3(points); 
   window.ropeCurve = curve;
   
   const tubeGeometry = new THREE.TubeGeometry(
@@ -777,6 +979,31 @@ function completeConfig(){
 }
 
 function resetRope(){
+  // If using worker, let the worker handle the reset
+  if (useWorker && physicsWorker) {
+    physicsWorker.postMessage({ type: 'resetRope' });
+    ropePositions = [];
+    
+    if (ropeMeshes.length > 0) {
+      ropeMeshes.forEach(mesh => {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      });
+      ropeMeshes.length = 0;
+    }
+    
+    if (segmentTimer) {
+      clearInterval(segmentTimer);
+      segmentTimer = null;
+    }
+    
+    isPlaying = false;
+    isPaused = false;
+    return;
+  }
+  
+  // Original direct physics reset code
   for (let i = world.constraints.length -1; i >= 0; i--) {
     if (world.constraints[i] instanceof DistanceConstraint) {
       world.removeConstraint(world.constraints[i]);
@@ -811,64 +1038,75 @@ function resetRope(){
 }
 
 function createCoiler() {
-  if (coilerBody) {
-    world.removeBody(coilerBody);
-    coilerBody = null;
-  }
-  if (coilerBodyMesh) {
-    scene.remove(coilerBodyMesh);
-    coilerBodyMesh.geometry.dispose();
-    coilerBodyMesh.material.dispose();
-    coilerBodyMesh = null;
-  }
-  
-  const config = COILER_CONFIG[activeCoilerType];
-  coilerRadius = config.radius;
-  coilerHeight = config.height;
-  
-  coilerBody = new Body({ 
-    mass: 0, 
-    type: BODY_TYPES.KINEMATIC, 
-    material: defaultMaterial,
-    collisionFilterGroup: COLLISION_GROUPS.COILER,
-    collisionFilterMask: COLLISION_GROUPS.ROPE
-  });
-  
-  const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
-  coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
-  
-  const bumpRadius = coilerRadius * 0.03;
-  const spiralTurns = 6;
-  
-  for (let i = 0; i < 32; i++) {
-    const angle = (i / 32) * Math.PI * 2 * spiralTurns;
-    const zPos = ((i / 32) * coilerHeight) - (coilerHeight / 2);
+  if (useWorker) {
+    physicsWorker.postMessage({ 
+      type: 'createCoiler',
+      data: {
+        coilerConfig: COILER_CONFIG,
+        activeCoilerType: activeCoilerType
+      }
+    });
+  } else {
+    // Original createCoiler code
+    if (coilerBody) {
+      world.removeBody(coilerBody);
+      coilerBody = null;
+    }
+    if (coilerBodyMesh) {
+      scene.remove(coilerBodyMesh);
+      coilerBodyMesh.geometry.dispose();
+      coilerBodyMesh.material.dispose();
+      coilerBodyMesh = null;
+    }
     
-    const x = coilerRadius * 0.97 * Math.cos(angle);
-    const y = coilerRadius * 0.97 * Math.sin(angle);
+    const config = COILER_CONFIG[activeCoilerType];
+    coilerRadius = config.radius;
+    coilerHeight = config.height;
     
-    const bumpShape = new Sphere(bumpRadius);
-    coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
+    coilerBody = new Body({ 
+      mass: 0, 
+      type: BODY_TYPES.KINEMATIC, 
+      material: defaultMaterial,
+      collisionFilterGroup: COLLISION_GROUPS.COILER,
+      collisionFilterMask: COLLISION_GROUPS.ROPE
+    });
+    
+    const cylinderShape = new Cylinder(coilerRadius, coilerRadius, coilerHeight, 16);
+    coilerBody.addShape(cylinderShape, new Vec3(0, 0, 0), new CQuaternion().setFromAxisAngle(new Vec3(1, 0, 0), Math.PI / 2));
+    
+    const bumpRadius = coilerRadius * 0.03;
+    const spiralTurns = 6;
+    
+    for (let i = 0; i < 32; i++) {
+      const angle = (i / 32) * Math.PI * 2 * spiralTurns;
+      const zPos = ((i / 32) * coilerHeight) - (coilerHeight / 2);
+      
+      const x = coilerRadius * 0.97 * Math.cos(angle);
+      const y = coilerRadius * 0.97 * Math.sin(angle);
+      
+      const bumpShape = new Sphere(bumpRadius);
+      coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
+    }
+    coilerBody.position.set(0.57, 0.225, config.zOffset);
+    world.addBody(coilerBody);
+  
+    /* Visual Meshes for Coiler Physics Objects
+    const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
+    cylinderGeo.rotateZ(Math.PI / 2); 
+    cylinderGeo.rotateY(Math.PI / 2); 
+  
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: config.color,
+      transparent: true,
+      opacity: 0.2,
+      wireframe: true,
+    });
+  
+    coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
+    coilerBodyMesh.position.set(0.57, 0.225, config.zOffset);
+    scene.add(coilerBodyMesh);
+    */
   }
-  coilerBody.position.set(0.57, 0.225, config.zOffset);
-  world.addBody(coilerBody);
-
-  /* Visual Meshes for Coiler Physics Objects
-  const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
-  cylinderGeo.rotateZ(Math.PI / 2); 
-  cylinderGeo.rotateY(Math.PI / 2); 
-
-  const wireMat = new THREE.MeshBasicMaterial({
-    color: config.color,
-    transparent: true,
-    opacity: 0.2,
-    wireframe: true,
-  });
-
-  coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
-  coilerBodyMesh.position.set(0.57, 0.225, config.zOffset);
-  scene.add(coilerBodyMesh);
-  */
 }
 
 function createCoilerSides() {
@@ -977,9 +1215,10 @@ function loadSpoolFromMovingAssets() {
       scene.add(spoolModel);
       createFloorCoil();
     },
+    undefined,
+    (error) => console.error('Error loading spool model:', error)
   );
 }
-
 let floorCoilMesh = null;
 function createFloorCoil() {
   if (floorCoilMesh) {
@@ -994,7 +1233,7 @@ function createFloorCoil() {
   const coilHeight = 0.23;
   const turns = 25;
   const pointsPerTurn = 24;
-  
+
   for (let i = 0; i <= turns * pointsPerTurn; i++) {
     const t = i / (turns * pointsPerTurn);
     const angle = turns * Math.PI * 2 * t;
@@ -1010,8 +1249,8 @@ function createFloorCoil() {
   const tubeGeometry = new THREE.TubeGeometry(
     coilCurve, 
     points.length, 
-    ropeRadius * 0.8,
-    12,
+    ropeRadius * 0.8, 
+    12, 
     false
   );
   
@@ -1039,64 +1278,132 @@ function animate() {
   requestAnimationFrame(animate);
   
   try {
-    const timeStep = 1/120;
-    const subSteps = 10;
-    for (let i = 0; i < subSteps; i++) {
-      world.step(timeStep / subSteps);
-    }
-    if (isPlaying) {
-      const baseRotationSpeed = -2.8;
-      const sizeRatio = 0.2 / coilerRadius;
-      const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-      if (ropeBodies.length > 299) {
-        isPlaying = false;
-        coilerBody.angularVelocity.set(0, 0, 0);
-        if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
-        if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
-        updateRopeCurve();
-        const finalRopePoints = [...ropePoints];
-        for (let i = world.constraints.length - 1; i >= 0; i--) {
-          if (world.constraints[i] instanceof DistanceConstraint) {
-        world.removeConstraint(world.constraints[i]);
+    if (useWorker && physicsWorker) {
+      // Worker-based physics
+      if (isPlaying) {
+        const timeStep = 1/120;
+        const subSteps = 10;
+        
+        physicsWorker.postMessage({ 
+          type: 'step',
+          data: {
+            timeStep: timeStep,
+            subSteps: subSteps
+          }
+        });
+        
+        // Handle rotation visuals
+        const baseRotationSpeed = -2.8;
+        const sizeRatio = 0.2 / coilerRadius;
+        const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+        
+        if (ropePositions.length > 299) {
+          isPlaying = false;
+          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+        } else if (isPlaying) {
+          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: rotationSpeed } });
+        }
+        
+        // Visual rotations
+        const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
+        if (coilerBodyMesh) {
+          coilerBodyMesh.rotation.z -= visualRotation;
+        }
+        if (spoolModel && counterModel) {
+          spoolModel.rotation.y -= visualRotation;
+          if (floorCoilMesh) floorCoilMesh.rotation.y -= visualRotation;
+        }
+        if (coilerBodyMeshSide1) {
+          coilerBodyMeshSide1.rotation.z -= visualRotation;
+        }
+        if (coilerBodyMeshSide2) {
+          coilerBodyMeshSide2.rotation.z -= visualRotation;
+        }
+        if (movingModel) {
+          movingModel.rotation.z += visualRotation;
+        }
+      }
+      
+      // Update dummy anchor position in worker
+      if (dummy) {
+        dummy.getWorldPosition(temp);
+        physicsWorker.postMessage({ 
+          type: 'updateAnchor',
+          data: {
+            x: temp.x,
+            y: temp.y,
+            z: temp.z
+          }
+        });
+      }
+    } else {
+      // Original direct physics code
+      const timeStep = 1/120;
+      const subSteps = 10;
+      for (let i = 0; i < subSteps; i++) {
+        world.step(timeStep / subSteps);
+      }
+      // Rest of original physics and animation code
+      if (isPlaying) {
+        const baseRotationSpeed = -2.8;
+        const sizeRatio = 0.2 / coilerRadius;
+        const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+        if (ropeBodies.length > 299) {
+          isPlaying = false;
+          coilerBody.angularVelocity.set(0, 0, 0);
+          if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
+          if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
+          
+          // Make all rope bodies static instead of removing them
+          for (let i = 0; i < ropeBodies.length; i++) {
+            const body = ropeBodies[i];
+            body.type = BODY_TYPES.STATIC;
+            body.mass = 0;
+            body.updateMassProperties();
+            body.velocity.set(0, 0, 0);
+            body.angularVelocity.set(0, 0, 0);
+            body.force.set(0, 0, 0);
+            body.torque.set(0, 0, 0);
+          }
+          
+          // Save the current rope shape
+          updateRopeCurve();
+          
+          // Clean up existing timer
+          if (segmentTimer) {
+            clearInterval(segmentTimer);
+            segmentTimer = null;
           }
         }
-        for (let i = 0; i < ropeBodies.length; i++) {
-          world.removeBody(ropeBodies[i]);
+        if (coilerBody) {
+          coilerBody.angularVelocity.set(0, 0, rotationSpeed);
         }
-        ropeBodies.length = 0;
-        ropePoints.length = 0;
-        ropePoints.push(...finalRopePoints);
+        if (coilerBodySide1) {
+          coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+        }
+        if (coilerBodySide2) {
+          coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+        }
+        const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
+        if (coilerBodyMesh) {
+          coilerBodyMesh.rotation.z -= visualRotation;
+        }
+        if (spoolModel && coilerBody && counterModel) {
+          spoolModel.rotation.y -= visualRotation;
+          floorCoilMesh.rotation.y -= visualRotation;
+        }
+        if (coilerBodyMeshSide1) {
+          coilerBodyMeshSide1.rotation.z -= visualRotation;
+        }
+        if (coilerBodyMeshSide2) {
+          coilerBodyMeshSide2.rotation.z -= visualRotation;
+        }
+        if (movingModel) {
+          movingModel.rotation.z += visualRotation;
+        }
       }
-      if (coilerBody) {
-        coilerBody.angularVelocity.set(0, 0, rotationSpeed);
-      }
-      if (coilerBodySide1) {
-        coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
-      }
-      if (coilerBodySide2) {
-        coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
-      }
-      const visualRotation = 0.016 * Math.min(sizeRatio, 1.5);
-      if (coilerBodyMesh) {
-        coilerBodyMesh.rotation.z -= visualRotation;
-      }
-      if (spoolModel && coilerBody && counterModel) {
-        spoolModel.rotation.y -= visualRotation;
-        floorCoilMesh.rotation.y -= visualRotation;
-      }
-      if (coilerBodyMeshSide1) {
-        coilerBodyMeshSide1.rotation.z -= visualRotation;
-      }
-      if (coilerBodyMeshSide2) {
-        coilerBodyMeshSide2.rotation.z -= visualRotation;
-      }
-      if (movingModel) {
-        movingModel.rotation.z += visualRotation;
-      }
-    }
-    if (dummy) {
-      dummy.getWorldPosition(temp);
-      if (anchorEnd) {
+      if (dummy) {
+        dummy.getWorldPosition(temp);
         anchorEnd.position.x = temp.x;
         anchorEnd.position.y = temp.y;
         anchorEnd.position.z = temp.z;
@@ -1108,17 +1415,16 @@ function animate() {
           ropeBodies[i].angularVelocity.scale(0.9);
         }
       }
-    }
-
-    if (ropeBodies.length > 0) {
-      if (ropeMeshes.length > 0 && ropeMeshes[0]) {
-        updateRopeGeometry();
-      } else {
+      if (ropeBodies.length > 0) {
+        if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+          updateRopeGeometry();
+        } else {
+          createRopeMesh();
+        }
+      }
+      if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
         createRopeMesh();
       }
-    }
-    if (ropeBodies.length > 0 && ropeMeshes.length === 0) {
-      createRopeMesh();
     }
     controls.update();
     renderer.render(scene, camera);
@@ -1127,6 +1433,7 @@ function animate() {
   }
 }
 animate();
+
 setTimeout(() => {
   checkAndCreateRope();
 }, 1000);
