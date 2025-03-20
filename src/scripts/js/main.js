@@ -9,6 +9,14 @@ let ropePositions = [];
 let useWorker = false; // Start with false, enable after initialization
 let ropeFinalized = false; // Add a new flag to track finalized state
 
+// Add constants at the top of the file for better maintainability
+const INITIAL_SEGMENTS = 40;
+
+// New function to get max segments based on coiler type
+function getMaxSegments(coilerType) {
+  return coilerType === "100-200" ? 300 : 400;
+}
+
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
@@ -72,7 +80,7 @@ function initPhysicsWorker() {
             break;
             
           case 'ropeReset':
-            console.log('Rope reset in worker');
+            console.log('Rope reset in worker confirmed');
             ropePositions = [];
             ropeFinalized = false; // Ensure the flag is reset
             
@@ -87,7 +95,6 @@ function initPhysicsWorker() {
             break;
             
           case 'segmentLimitReached':
-            console.log('Segment limit reached, rope physics made static');
             ropePositions = positions;
             isPlaying = false;
             ropeFinalized = true; // Set our flag here as well
@@ -100,7 +107,6 @@ function initPhysicsWorker() {
             break;
             
           case 'ropeFinalized':
-            console.log('Rope finalized in worker');
             ropePositions = positions;
             ropeFinalized = true; // Mark as finalized
             
@@ -298,25 +304,26 @@ let oldCounterValue = '';
 let oldCoilerValue = '';
 let oldCutterValue = '';
 
+// Update the COILER_CONFIG object to make 100-10 3% smaller
 const COILER_CONFIG = {
   "100-10": {
-    radius: 0.2,
-    height: 0.18,
+    radius: 0.194, // 3% smaller (was 0.2)
+    height: 0.1746, // 3% smaller (was 0.18)
     color: 0x00ff00,
-    zOffset: 0.025,
-    sideOffset1: 0.12,
-    sideOffset2: -0.07
+    zOffset: 0.02425, // 3% smaller (was 0.025)
+    sideOffset1: 0.1164, // 3% smaller (was 0.12)
+    sideOffset2: -0.0679 // 3% smaller (was -0.07)
   },
   "100-99": {
-    radius: 0.16,
-    height: 0.15,
+    radius: 0.1568, // 2% smaller (was 0.16)
+    height: 0.147, // 2% smaller (was 0.15)
     color: 0x0088ff,
-    zOffset: 0.025,
-    sideOffset1: 0.09,
-    sideOffset2: -0.05
+    zOffset: 0.0245, // 2% smaller (was 0.025)
+    sideOffset1: 0.0882, // 2% smaller (was 0.09)
+    sideOffset2: -0.049 // 2% smaller (was -0.05)
   },
   "100-200": {
-    radius: 0.12,
+    radius: 0.1,
     height: 0.13,
     color: 0xff5500,
     zOffset: 0.025,
@@ -331,34 +338,47 @@ let coilerRadius = 0.2;
 let coilerHeight = 0.18;
 let activeCoilerType = "100-10";
 
-// Add this function to ensure complete reset when coiler changes
+// Enhance the resetRopeCompletely function to ensure better synchronization
 function resetRopeCompletely() {
-  console.log("Complete rope reset - forced");
+  console.log("Resetting rope completely");
   ropeFinalized = false;
   isPlaying = false;
   
-  if (useWorker && physicsWorker) {
-    physicsWorker.postMessage({ type: 'resetRope' });
-    ropePositions = [];
-    
-    if (ropeMeshes.length > 0) {
-      ropeMeshes.forEach(mesh => {
-        scene.remove(mesh);
-        mesh.geometry.dispose();
-        mesh.material.dispose();
-      });
-      ropeMeshes.length = 0;
-    }
-  } else {
-    resetRope();
-  }
-  
+  // Clear any pending timers first to prevent interference
   if (segmentTimer) {
     clearInterval(segmentTimer);
     segmentTimer = null;
   }
+  
+  if (useWorker && physicsWorker) {
+    // Set a flag to track reset completion
+    const resetCompletionCheck = () => {
+      console.log("Checking if rope meshes were properly cleared");
+      // Clean up any remaining visual elements
+      if (ropeMeshes.length > 0) {
+        ropeMeshes.forEach(mesh => {
+          scene.remove(mesh);
+          mesh.geometry.dispose();
+          mesh.material.dispose();
+        });
+        ropeMeshes.length = 0;
+      }
+      
+      // Force reset of positions array
+      ropePositions = [];
+    };
+    
+    // Send reset message to worker
+    physicsWorker.postMessage({ type: 'resetRope', forceReset: true });
+    
+    // Set a timeout to ensure cleanup happens even if worker message is missed
+    setTimeout(resetCompletionCheck, 100);
+  } else {
+    resetRope();
+  }
 }
 
+// Adjust the dummy position for 100-200 to be closer to the radius
 function onDropdownChange() {
   const reelValue = reelSelect.value;
   const counterValue = counterSelect.value;
@@ -425,72 +445,73 @@ function onDropdownChange() {
     // ALWAYS force a complete reset when coiler changes
     resetRopeCompletely();
     
-    if (coilerValue === '100-10.gltf') {
-      activeCoilerType = "100-10";
-    }
-    else if (coilerValue === '100-99.gltf') {
-      activeCoilerType = "100-99";
-    }
-    else if (coilerValue === '100-200.gltf') {
-      activeCoilerType = "100-200";
-    }
-    
-    createCoiler();
-    createCoilerSides();
-    
-    if (coilerValue === '100-10.gltf') {
-      loadCombo('100-10-STAND.gltf', (model) => {
-        standModel = model;
-        checkAndCreateRope();
-      });
-      loadCombo('100-10-MOVING.gltf', (model) => {
-        movingModel = model;
-        dummy = new THREE.Object3D();
-        dummy.position.set(0.18, 0.06, -0.03);
-        movingModel.add(dummy);
-        createCoiler();
-        createCoilerSides();
-        checkAndCreateRope();
-      });
-    }
-    else if (coilerValue === '100-99.gltf') {
-      loadCombo('100-99-STAND.gltf', (model) => {
-        standModel = model;
-        checkAndCreateRope();
-      });
-      loadCombo('100-99-MOVING.gltf', (model) => {
-        movingModel = model;
-        dummy = new THREE.Object3D();
-        dummy.position.set(0.14, 0.06, -0.03);
-        movingModel.add(dummy);
-        createCoiler();
-        createCoilerSides();
-        checkAndCreateRope();
-      });
-    }
-    else if (coilerValue === '100-200.gltf') {
-      loadCombo('100-200-STAND.gltf', (model) => {
-        standModel = model;
-        checkAndCreateRope();
-      });
-      loadCombo('100-200-MOVING.gltf', (model) => {
-        movingModel = model;
-        dummy = new THREE.Object3D();
-        dummy.position.set(0.11, 0.04, 0);
-        movingModel.add(dummy);
-        createCoiler();
-        createCoilerSides();
-        checkAndCreateRope();
-      });
-    }
-    else if (coilerValue) {
-      loadCombo(coilerValue, (model) => {
-        standModel = model;
-        checkAndCreateRope();
-      });
-    } else {
-      resetRope();
-    }
+    // Add a short delay to ensure reset completes before continuing
+    setTimeout(() => {
+      if (coilerValue === '100-10.gltf') {
+        activeCoilerType = "100-10";
+      }
+      else if (coilerValue === '100-99.gltf') {
+        activeCoilerType = "100-99";
+      }
+      else if (coilerValue === '100-200.gltf') {
+        activeCoilerType = "100-200";
+      }
+      
+      // Create the new coiler physics objects
+      createCoiler();
+      createCoilerSides();
+      
+      // Load the appropriate models with delays to ensure proper sequencing
+      if (coilerValue === '100-10.gltf') {
+        loadCombo('100-10-STAND.gltf', (model) => {
+          standModel = model;
+          setTimeout(() => checkAndCreateRope(), 50);
+        });
+        loadCombo('100-10-MOVING.gltf', (model) => {
+          movingModel = model;
+          dummy = new THREE.Object3D();
+          // Updated position - 3% smaller
+          dummy.position.set(0.1746, 0.0582, -0.0291);
+          movingModel.add(dummy);
+          createCoiler();
+          createCoilerSides();
+          setTimeout(() => checkAndCreateRope(), 100);
+        });
+      }
+      else if (coilerValue === '100-99.gltf') {
+        // Similar pattern for 100-99
+        loadCombo('100-99-STAND.gltf', (model) => {
+          standModel = model;
+          setTimeout(() => checkAndCreateRope(), 50);
+        });
+        loadCombo('100-99-MOVING.gltf', (model) => {
+          movingModel = model;
+          dummy = new THREE.Object3D();
+          dummy.position.set(0.1372, 0.0588, -0.0294);
+          movingModel.add(dummy);
+          createCoiler();
+          createCoilerSides();
+          setTimeout(() => checkAndCreateRope(), 100);
+        });
+      }
+      else if (coilerValue === '100-200.gltf') {
+        // Keep 100-200 at its current position as requested
+        loadCombo('100-200-STAND.gltf', (model) => {
+          standModel = model;
+          setTimeout(() => checkAndCreateRope(), 50);
+        });
+        loadCombo('100-200-MOVING.gltf', (model) => {
+          movingModel = model;
+          dummy = new THREE.Object3D();
+          dummy.position.set(0.09, 0.04, 0);
+          movingModel.add(dummy);
+          createCoiler();
+          createCoilerSides();
+          setTimeout(() => checkAndCreateRope(), 100);
+        });
+      }
+      // ...existing code...
+    }, 150); // Delay after reset to ensure proper sequencing
   }
   
   if (cutterValue !== oldCutterValue) {
@@ -506,6 +527,9 @@ function onDropdownChange() {
   if (completeConfig()) {
     if (!isPlaying) {
       isPlaying = true;
+      // Create a variable for the interval time based on the coiler type
+      const intervalTime = activeCoilerType === "100-200" ? 125 : 125; // Same for now, but can be adjusted
+      
       segmentTimer = setInterval(() => {
         if (isPlaying && completeConfig()) { // Only add segments if playing AND all components selected
           // Use worker or direct physics based on useWorker flag
@@ -514,14 +538,15 @@ function onDropdownChange() {
               type: 'addSegment',
               data: {
                 coilerConfig: COILER_CONFIG,
-                activeCoilerType: activeCoilerType
+                activeCoilerType: activeCoilerType,
+                maxSegments: getMaxSegments(activeCoilerType)
               }
             });
           } else if (!useWorker) {
             addRopeSegment();
           }
         }
-      }, 125);
+      }, intervalTime);
     }
   } else {
     if (isPlaying) {
@@ -542,15 +567,25 @@ function onDropdownChange() {
   oldCutterValue = cutterValue;
   
   updatePrice();
-  checkAndCreateRope();
+  
+  // Only call checkAndCreateRope if we didn't change coilers
+  // (since we'll call it with delay when changing coilers)
+  if (coilerValue === oldCoilerValue) {
+    checkAndCreateRope();
+  }
 }
 
+// Update checkAndCreateRope to remove logs
 function checkAndCreateRope() {
   if (completeConfig()) {
     if (useWorker && physicsWorker) {
       if (ropePositions.length === 0 && !ropeFinalized) {
-        console.log("Creating rope - all components selected");
-        physicsWorker.postMessage({ type: 'createRope' });
+        console.log('Creating rope with worker...');
+        // Pass the max segments based on active coiler type
+        physicsWorker.postMessage({ 
+          type: 'createRope', 
+          data: { maxSegments: getMaxSegments(activeCoilerType) }
+        });
         
         if (!isPlaying) {
           isPlaying = true;
@@ -560,7 +595,8 @@ function checkAndCreateRope() {
                 type: 'addSegment',
                 data: {
                   coilerConfig: COILER_CONFIG,
-                  activeCoilerType: activeCoilerType
+                  activeCoilerType: activeCoilerType,
+                  maxSegments: getMaxSegments(activeCoilerType)
                 }
               });
             }
@@ -570,7 +606,6 @@ function checkAndCreateRope() {
     } else {
       // Original code for direct physics
       if (ropeBodies.length === 0) {
-        console.log("Creating rope - all components selected");
         createRopeSegments();
         if (!isPlaying) {
           isPlaying = true;
@@ -585,14 +620,12 @@ function checkAndCreateRope() {
   } else {
     if (useWorker) {
       if (ropePositions.length > 0) {
-        console.log("Removing rope - not all components selected");
         physicsWorker.postMessage({ type: 'resetRope' });
         ropePositions = [];
       }
     } else {
       // Original code
       if (ropeBodies.length > 0) {
-        console.log("Removing rope - not all components selected");
         resetRope();
       }
     }
@@ -918,24 +951,6 @@ anchor.position.set(0, 0.3, 0.03);
 world.addBody(anchor);
 
 const ropeMeshes = [];
-
-// Update addRopeSegment function to check for 400 segments
-function addRopeSegment(){
-  try {
-    // Change 300 to 400 as the segment limit
-    if (ropeBodies.length >= 400) return;
-    if (ropeBodies.length < 11) return;
-    const anchorEndIndex = ropeBodies.length - 1;
-    const baseSegment = ropeBodies[10];
-    const newBody = new Body({ 
-      mass: segmentMass, 
-      shape: new Sphere(segmentWidth / 2), 
-      position: new Vec3(
-        baseSegment.position.x,
-        baseSegment.position.y,
-        baseSegment.position.z
-      ),
-      material: defaultMaterial,
       collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
       collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
     });
@@ -1236,14 +1251,14 @@ function createCoilerSides() {
     opacity: 0.2,
     wireframe: true,
   });
-
+  /*
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
   coilerBodyMeshSide1.position.set(0.57, 0.225, config.sideOffset1);
   scene.add(coilerBodyMeshSide1);
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.225, config.sideOffset2);
-  scene.add(coilerBodyMeshSide2);
+  scene.add(coilerBodyMeshSide2);*/
 }
 
 let spoolModel = null;
@@ -1328,16 +1343,19 @@ function animate() {
   
   try {
     if (useWorker && physicsWorker) {
-      // Check if we need to transition to static state
-      if (ropePositions.length > 399 && isPlaying) {
+      // Use the function instead of constant
+      const maxSegments = getMaxSegments(activeCoilerType);
+      
+      // Check if we need to transition to static state - use maxSegments - 1
+      if (ropePositions.length > maxSegments - 1 && isPlaying) {
         isPlaying = false;
         ropeFinalized = true;
 
-        console.log('Rope reached max length, finalizing and stopping communication');
-        
-        // Final communication with worker
         physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
-        physicsWorker.postMessage({ type: 'finalizeRope' });
+        physicsWorker.postMessage({ 
+          type: 'finalizeRope', 
+          data: { maxSegments: maxSegments }
+        });
         
         if (segmentTimer) {
           clearInterval(segmentTimer);
@@ -1360,11 +1378,20 @@ function animate() {
             }
           });
           
-          // Handle rotation visuals
+          // Handle rotation visuals with increased speed for 100-200
           const baseRotationSpeed = -2.8;
           const sizeRatio = 0.2 / coilerRadius;
-          const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: rotationSpeed } });
+          // Apply 20% faster rotation for 100-200 coiler (was 10%)
+          const speedMultiplier = (activeCoilerType === "100-200") ? 1.2 : 1.0;
+          const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5) * speedMultiplier;
+          
+          physicsWorker.postMessage({ 
+            type: 'setRotation', 
+            data: { 
+              rotationSpeed: rotationSpeed,
+              activeCoilerType: activeCoilerType  // Pass this to worker
+            }
+          });
           
           // Update dummy anchor position in worker ONLY if not finalized
           if (dummy) {
@@ -1386,12 +1413,16 @@ function animate() {
       
       // Visual rotations happen regardless of whether we're communicating with the worker
       if (isPlaying && completeConfig()) {
+        // Update visual rotation speeds with the 10% increase for 100-200
         updateVisualRotations();
       }
     } else {
       // Direct physics code - no changes needed here
       const timeStep = 1/120;
       const subSteps = 10;
+      
+      // Use the function instead of constant for direct physics too
+      const maxSegments = getMaxSegments(activeCoilerType);
       
       // Only step physics if playing
       if (isPlaying && completeConfig()) {
@@ -1405,7 +1436,7 @@ function animate() {
         const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
         
         // Change 299 to 399 for the segment limit check
-        if (ropeBodies.length > 399) {
+        if (ropeBodies.length > maxSegments - 1) {
           isPlaying = false;
           coilerBody.angularVelocity.set(0, 0, 0);
           if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
@@ -1497,8 +1528,11 @@ function animate() {
   }
 }
 
+// Update updateVisualRotations to apply the 20% speed increase for 100-200
 function updateVisualRotations() {
-  const visualRotation = 0.016 * Math.min(0.2 / coilerRadius, 1.5);
+  // Apply 20% faster rotation for 100-200 coiler (was 10%)
+  const speedMultiplier = (activeCoilerType === "100-200") ? 1.2 : 1.0;
+  const visualRotation = 0.016 * Math.min(0.2 / coilerRadius, 1.5) * speedMultiplier;
   
   if (coilerBodyMesh) {
     coilerBodyMesh.rotation.z -= visualRotation;

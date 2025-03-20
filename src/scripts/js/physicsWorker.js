@@ -10,8 +10,14 @@ const COLLISION_GROUPS = {
   ANCHOR: 8
 };
 
+// Add constants to match main.js
+const INITIAL_SEGMENTS = 40;
+
+// Keep track of the current max segments
+let currentMaxSegments = 400; // Default to 400, will be updated with messages
+
 // Rope related variables
-let segmentCount = 40;
+let segmentCount = INITIAL_SEGMENTS; // Use the constant
 let segmentWidth = 0.012;
 let segmentMass = 0.5;
 let segmentDistance = 0.012;
@@ -127,19 +133,36 @@ function createRopeSegments() {
   world.addConstraint(anchorEndConstraint);
 }
 
-// Reset the rope physics
+// Enhance the reset function to be more thorough
 function resetRope() {
   try {
+    console.log("Worker: Beginning rope reset");
     isRopeFinalized = false; // Make sure flag is reset
     
-    for (let i = world?.constraints?.length - 1; i >= 0; i--) {
-      if (world.constraints[i] instanceof DistanceConstraint) {
-        world.removeConstraint(world.constraints[i]);
+    // Ensure all constraints are properly removed
+    if (world && world.constraints) {
+      const constraintsToRemove = [...world.constraints]; // Create a copy to avoid mutation issues
+      for (const constraint of constraintsToRemove) {
+        try {
+          world.removeConstraint(constraint);
+        } catch (e) {
+          console.error("Error removing constraint:", e);
+        }
       }
     }
     
-    for (let i = 0; i < ropeBodies.length; i++) {
-      world.removeBody(ropeBodies[i]);
+    // Ensure all bodies are properly removed
+    if (ropeBodies && ropeBodies.length) {
+      const bodiesToRemove = [...ropeBodies]; // Create a copy to avoid mutation issues
+      for (const body of bodiesToRemove) {
+        if (body && world) {
+          try {
+            world.removeBody(body);
+          } catch (e) {
+            console.error("Error removing body:", e);
+          }
+        }
+      }
     }
     
     ropeBodies.length = 0;
@@ -148,16 +171,23 @@ function resetRope() {
     addedSegments = 0;
     currentDirection = 1;
     currentZ = 0;
+    
+    console.log("Worker: Rope reset complete - bodies:", ropeBodies.length);
+    return true;
   } catch (err) {
     console.error("Error in resetRope:", err);
+    return false;
   }
 }
 
-// Add a new rope segment
-function addRopeSegment(coilerConfig, activeCoilerType) {
+// Simplify the addRopeSegment function
+function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
   try {
-    // Change 300 to 400 as the segment limit
-    if (ropeBodies.length >= 400) return;
+    // Use the provided maxSegments parameter
+    const segmentLimit = maxSegments || currentMaxSegments;
+    
+    // Check against the specific limit for this coiler
+    if (ropeBodies.length >= segmentLimit) return;
     if (ropeBodies.length < 11) return;
     
     const anchorEndIndex = ropeBodies.length - 1;
@@ -257,6 +287,15 @@ function createCoiler(config, activeCoilerType) {
   const coilerConfig = config[activeCoilerType];
   const coilerRadius = coilerConfig.radius;
   const coilerHeight = coilerConfig.height;
+  
+  // Add debug log for all coiler types and include z position for 100-200
+  if (isAnimationStarted) {
+    if (activeCoilerType === "100-200") {
+      console.log(`Creating ${activeCoilerType} coiler with radius: ${coilerConfig.radius}, height: ${coilerConfig.height}, zOffset: ${coilerConfig.zOffset}`);
+    } else if (activeCoilerType === "100-10" || activeCoilerType === "100-99") {
+      console.log(`Creating ${activeCoilerType} coiler with radius: ${coilerConfig.radius}, height: ${coilerConfig.height}`);
+    }
+  }
   
   coilerBody = new Body({ 
     mass: 0, 
@@ -358,16 +397,20 @@ function updateAnchorPosition(x, y, z) {
   }
 }
 
-// Set coiler rotation speed
-function setCoilerRotation(rotationSpeed) {
+// Update setCoilerRotation to apply the 10% speed increase for 100-200
+function setCoilerRotation(rotationSpeed, activeCoilerType) {
+  // Apply 10% faster rotation for 100-200 coiler if not provided in the message
+  const speedMultiplier = (activeCoilerType === "100-200") ? 1.1 : 1.0;
+  const adjustedSpeed = rotationSpeed * (activeCoilerType ? speedMultiplier : 1.0);
+  
   if (coilerBody) {
-    coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+    coilerBody.angularVelocity.set(0, 0, adjustedSpeed);
   }
   if (coilerBodySide1) {
-    coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+    coilerBodySide1.angularVelocity.set(0, 0, adjustedSpeed);
   }
   if (coilerBodySide2) {
-    coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+    coilerBodySide2.angularVelocity.set(0, 0, adjustedSpeed);
   }
 }
 
@@ -405,9 +448,11 @@ function makeRopeBodiesStatic() {
 }
 
 // Step the physics simulation
-function stepPhysics(timeStep, subSteps) {
-  // Change 300 to 400 as the segment limit
-  if (ropeBodies.length >= 400) {
+function stepPhysics(timeStep, subSteps, maxSegments) {
+  const segmentLimit = maxSegments || currentMaxSegments;
+  
+  // Use the specific limit
+  if (ropeBodies.length >= segmentLimit) {
     // Convert all rope bodies to static first time we hit the limit
     if (ropeBodies[0].type !== BODY_TYPES.STATIC) {
       makeRopeBodiesStatic();
@@ -428,13 +473,23 @@ function stepPhysics(timeStep, subSteps) {
   return positions;
 }
 
-// Update message handler to respect the finalized state
+// Update the message handler to handle forced resets
 self.onmessage = function(e) {
   try {
-    const { type, data } = e.data;
+    const { type, data, forceReset } = e.data;
     
     // Always process these message types even if rope is finalized
     const criticalMessages = ['resetRope', 'init', 'finalizeRope'];
+    
+    // Handle forced resets immediately
+    if (type === 'resetRope' && forceReset === true) {
+      console.log("Worker: Forced rope reset requested");
+      resetRope();
+      isRopeFinalized = false;
+      isAnimationStarted = false;
+      self.postMessage({ type: 'ropeReset', success: true });
+      return;
+    }
     
     // Set animation started flag when creating rope (which only happens when all components are selected)
     if (type === 'createRope') {
@@ -443,9 +498,15 @@ self.onmessage = function(e) {
       isAnimationStarted = false;
     }
     
-    // Only log received messages when animation has started or it's a critical message
-    if ((isAnimationStarted && !isRopeFinalized) || criticalMessages.includes(type)) {
-      console.log(`Worker received message: ${type}`);
+    // Only log addSegment messages with the specific format
+    if (type === 'addSegment' && isAnimationStarted && !isRopeFinalized) {
+      // Update current max segments if provided
+      if (data && data.maxSegments) {
+        currentMaxSegments = data.maxSegments;
+      }
+      
+      // Only log this specific message format and nothing else
+      console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}, max: ${currentMaxSegments}`);
     }
     
     // Skip most message types if rope is finalized
@@ -453,52 +514,33 @@ self.onmessage = function(e) {
       return; // Silently ignore non-critical messages when rope is finalized
     }
     
+    // Update maxSegments if provided
+    if (data && data.maxSegments) {
+      currentMaxSegments = data.maxSegments;
+    }
+    
     switch (type) {
       case 'init':
-        console.log('Worker initializing physics');
         initPhysics();
         self.postMessage({ type: 'initialized' });
         break;
         
       case 'createRope':
-        console.log('Worker creating rope');
-        createRopeSegments();
-        const initialPositions = ropeBodies.map(body => ({
-          x: body.position.x,
-          y: body.position.y,
-          z: body.position.z
-        }));
-        console.log(`Worker created rope with ${initialPositions.length} segments`);
-        self.postMessage({ 
-          type: 'ropeCreated', 
-          positions: initialPositions 
-        });
-        break;
-        
-      case 'resetRope':
-        console.log('Worker resetting rope');
-        resetRope();
-        isRopeFinalized = false; // Reset finalized flag
-        self.postMessage({ type: 'ropeReset' });
-        break;
-        
-      case 'createCoiler':
-        console.log(`Worker creating coiler: ${data.activeCoilerType}`);
-        createCoiler(data.coilerConfig, data.activeCoilerType);
+        console.log(`Worker: Creating rope for ${data.activeCoilerType}`);
         createCoilerSides(data.coilerConfig, data.activeCoilerType);
         self.postMessage({ type: 'coilerCreated' });
         break;
         
       case 'addSegment':
-        console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}`);
-        
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length < 400) {
-          addRopeSegment(data.coilerConfig, data.activeCoilerType);
+        if (data.maxSegments) {
+          currentMaxSegments = data.maxSegments;
         }
         
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length >= 400 && ropeBodies[0].type !== BODY_TYPES.STATIC) {
+        if (ropeBodies.length < currentMaxSegments) {
+          addRopeSegment(data.coilerConfig, data.activeCoilerType, currentMaxSegments);
+        }
+        
+        if (ropeBodies.length >= currentMaxSegments && ropeBodies[0].type !== BODY_TYPES.STATIC) {
           makeRopeBodiesStatic();
         }
         
@@ -507,10 +549,8 @@ self.onmessage = function(e) {
           y: body.position.y,
           z: body.position.z
         }));
-        console.log(`Worker now has ${segmentPositions.length} segments`);
         
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length >= 400) {
+        if (ropeBodies.length >= currentMaxSegments) {
           self.postMessage({ 
             type: 'segmentLimitReached',
             positions: segmentPositions 
@@ -528,11 +568,11 @@ self.onmessage = function(e) {
         break;
         
       case 'setRotation':
-        setCoilerRotation(data.rotationSpeed);
+        setCoilerRotation(data.rotationSpeed, data.activeCoilerType);
         break;
         
       case 'step':
-        const positions = stepPhysics(data.timeStep, data.subSteps);
+        const positions = stepPhysics(data.timeStep, data.subSteps, currentMaxSegments);
         self.postMessage({
           type: 'stepped',
           positions: positions,
@@ -541,7 +581,6 @@ self.onmessage = function(e) {
         break;
         
       case 'finalizeRope':
-        console.log('Worker finalizing rope');
         makeRopeBodiesStatic(); // This will set isRopeFinalized = true
         
         const finalPositions = ropeBodies.map(body => ({
