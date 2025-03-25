@@ -550,7 +550,14 @@ function checkAndCreateRope() {
     if (useWorker && physicsWorker) {
       if (ropePositions.length === 0 && !ropeFinalized) {
         console.log("Creating rope - all components selected");
-        physicsWorker.postMessage({ type: 'createRope' });
+        physicsWorker.postMessage({ 
+          type: 'createRope',
+          data: { 
+            coilerConfig: COILER_CONFIG,
+            activeCoilerType: activeCoilerType,
+            maxSegments: getMaxSegments(activeCoilerType)
+          }
+        });
         
         if (!isPlaying) {
           isPlaying = true;
@@ -560,7 +567,8 @@ function checkAndCreateRope() {
                 type: 'addSegment',
                 data: {
                   coilerConfig: COILER_CONFIG,
-                  activeCoilerType: activeCoilerType
+                  activeCoilerType: activeCoilerType,
+                  maxSegments: getMaxSegments(activeCoilerType)
                 }
               });
             }
@@ -919,11 +927,17 @@ world.addBody(anchor);
 
 const ropeMeshes = [];
 
+// Add/update this function to get the max segments based on coiler type
+function getMaxSegments(coilerType) {
+  return coilerType === "100-200" ? 300 : 400;
+}
+
 // Update addRopeSegment function to check for 400 segments
 function addRopeSegment(){
   try {
-    // Change 300 to 400 as the segment limit
-    if (ropeBodies.length >= 400) return;
+    // Use getMaxSegments for the check
+    const maxSegments = getMaxSegments(activeCoilerType);
+    if (ropeBodies.length >= maxSegments) return;
     if (ropeBodies.length < 11) return;
     const anchorEndIndex = ropeBodies.length - 1;
     const baseSegment = ropeBodies[10];
@@ -1230,7 +1244,7 @@ function createCoilerSides() {
   cylinderGeoSide1.rotateX(Math.PI / 2);
   cylinderGeoSide2.rotateX(Math.PI / 2);
 
-  const wireMatSide = new THREE.MeshBasicMaterial({
+  /*const wireMatSide = new THREE.MeshBasicMaterial({
     color: config.color,
     transparent: true,
     opacity: 0.2,
@@ -1243,7 +1257,7 @@ function createCoilerSides() {
   
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.225, config.sideOffset2);
-  scene.add(coilerBodyMeshSide2);
+  scene.add(coilerBodyMeshSide2);*/
 }
 
 let spoolModel = null;
@@ -1328,16 +1342,24 @@ function animate() {
   
   try {
     if (useWorker && physicsWorker) {
+      // Use the function to get the right segment limit based on coiler type
+      const maxSegments = getMaxSegments(activeCoilerType);
+      
       // Check if we need to transition to static state
-      if (ropePositions.length > 399 && isPlaying) {
+      if (ropePositions.length > maxSegments - 1 && isPlaying) {
         isPlaying = false;
         ropeFinalized = true;
 
-        console.log('Rope reached max length, finalizing and stopping communication');
+        console.log(`Rope reached max length (${maxSegments}) for ${activeCoilerType}, finalizing and stopping communication`);
         
         // Final communication with worker
         physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
-        physicsWorker.postMessage({ type: 'finalizeRope' });
+        physicsWorker.postMessage({ 
+          type: 'finalizeRope',
+          data: { 
+            maxSegments: maxSegments 
+          }
+        });
         
         if (segmentTimer) {
           clearInterval(segmentTimer);
@@ -1389,9 +1411,12 @@ function animate() {
         updateVisualRotations();
       }
     } else {
-      // Direct physics code - no changes needed here
+      // Direct physics code - use the function here too
       const timeStep = 1/120;
       const subSteps = 10;
+      
+      // Get the right max segments for this coiler type
+      const maxSegments = getMaxSegments(activeCoilerType);
       
       // Only step physics if playing
       if (isPlaying && completeConfig()) {
@@ -1404,8 +1429,8 @@ function animate() {
         const sizeRatio = 0.2 / coilerRadius;
         const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
         
-        // Change 299 to 399 for the segment limit check
-        if (ropeBodies.length > 399) {
+        // Use dynamic max segments check
+        if (ropeBodies.length > maxSegments - 1) {
           isPlaying = false;
           coilerBody.angularVelocity.set(0, 0, 0);
           if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);

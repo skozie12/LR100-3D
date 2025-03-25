@@ -31,6 +31,9 @@ let isRopeFinalized = false;
 // Add this flag at the top with other state variables
 let isAnimationStarted = false;
 
+// Add a variable to track the current max segments based on coiler type
+let currentMaxSegments = 400; // Default, will be updated with messages
+
 // Initialize the physics world
 function initPhysics() {
   world = new World({
@@ -153,11 +156,13 @@ function resetRope() {
   }
 }
 
-// Add a new rope segment
-function addRopeSegment(coilerConfig, activeCoilerType) {
+// Update addRopeSegment function to use the max segments parameter
+function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
   try {
-    // Change 300 to 400 as the segment limit
-    if (ropeBodies.length >= 400) return;
+    // Use the provided maxSegments or fall back to the default
+    const segmentLimit = maxSegments || (activeCoilerType === "100-200" ? 300 : 400);
+    
+    if (ropeBodies.length >= segmentLimit) return;
     if (ropeBodies.length < 11) return;
     
     const anchorEndIndex = ropeBodies.length - 1;
@@ -404,10 +409,12 @@ function makeRopeBodiesStatic() {
   }
 }
 
-// Step the physics simulation
-function stepPhysics(timeStep, subSteps) {
-  // Change 300 to 400 as the segment limit
-  if (ropeBodies.length >= 400) {
+// Update stepPhysics to use the max segments parameter
+function stepPhysics(timeStep, subSteps, maxSegments) {
+  // Use the provided maxSegments or fall back to currentMaxSegments
+  const segmentLimit = maxSegments || currentMaxSegments;
+  
+  if (ropeBodies.length >= segmentLimit) {
     // Convert all rope bodies to static first time we hit the limit
     if (ropeBodies[0].type !== BODY_TYPES.STATIC) {
       makeRopeBodiesStatic();
@@ -431,7 +438,7 @@ function stepPhysics(timeStep, subSteps) {
 // Update message handler to respect the finalized state
 self.onmessage = function(e) {
   try {
-    const { type, data } = e.data;
+    const { type, data, forceReset } = e.data;
     
     // Always process these message types even if rope is finalized
     const criticalMessages = ['resetRope', 'init', 'finalizeRope'];
@@ -451,6 +458,13 @@ self.onmessage = function(e) {
     // Skip most message types if rope is finalized
     if (isRopeFinalized && !criticalMessages.includes(type)) {
       return; // Silently ignore non-critical messages when rope is finalized
+    }
+    
+    // Update currentMaxSegments if provided
+    if (data && data.maxSegments) {
+      currentMaxSegments = data.maxSegments;
+    } else if (data && data.activeCoilerType === "100-200") {
+      currentMaxSegments = 300;
     }
     
     switch (type) {
@@ -490,15 +504,13 @@ self.onmessage = function(e) {
         break;
         
       case 'addSegment':
-        console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}`);
+        console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}, max: ${currentMaxSegments}`);
         
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length < 400) {
-          addRopeSegment(data.coilerConfig, data.activeCoilerType);
+        if (ropeBodies.length < currentMaxSegments) {
+          addRopeSegment(data.coilerConfig, data.activeCoilerType, currentMaxSegments);
         }
         
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length >= 400 && ropeBodies[0].type !== BODY_TYPES.STATIC) {
+        if (ropeBodies.length >= currentMaxSegments && ropeBodies[0].type !== BODY_TYPES.STATIC) {
           makeRopeBodiesStatic();
         }
         
@@ -507,10 +519,8 @@ self.onmessage = function(e) {
           y: body.position.y,
           z: body.position.z
         }));
-        console.log(`Worker now has ${segmentPositions.length} segments`);
         
-        // Change 300 to 400 as the segment limit
-        if (ropeBodies.length >= 400) {
+        if (ropeBodies.length >= currentMaxSegments) {
           self.postMessage({ 
             type: 'segmentLimitReached',
             positions: segmentPositions 
@@ -532,7 +542,7 @@ self.onmessage = function(e) {
         break;
         
       case 'step':
-        const positions = stepPhysics(data.timeStep, data.subSteps);
+        const positions = stepPhysics(data.timeStep, data.subSteps, currentMaxSegments);
         self.postMessage({
           type: 'stepped',
           positions: positions,
