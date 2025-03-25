@@ -435,7 +435,7 @@ function stepPhysics(timeStep, subSteps, maxSegments) {
   return positions;
 }
 
-// Update message handler to respect the finalized state
+// Update message handler to minimize console output
 self.onmessage = function(e) {
   try {
     const { type, data, forceReset } = e.data;
@@ -443,16 +443,11 @@ self.onmessage = function(e) {
     // Always process these message types even if rope is finalized
     const criticalMessages = ['resetRope', 'init', 'finalizeRope'];
     
-    // Set animation started flag when creating rope (which only happens when all components are selected)
+    // Set animation started flag when creating rope
     if (type === 'createRope') {
       isAnimationStarted = true;
     } else if (type === 'resetRope') {
       isAnimationStarted = false;
-    }
-    
-    // Only log received messages when animation has started or it's a critical message
-    if ((isAnimationStarted && !isRopeFinalized) || criticalMessages.includes(type)) {
-      console.log(`Worker received message: ${type}`);
     }
     
     // Skip most message types if rope is finalized
@@ -469,20 +464,17 @@ self.onmessage = function(e) {
     
     switch (type) {
       case 'init':
-        console.log('Worker initializing physics');
         initPhysics();
         self.postMessage({ type: 'initialized' });
         break;
         
       case 'createRope':
-        console.log('Worker creating rope');
         createRopeSegments();
         const initialPositions = ropeBodies.map(body => ({
           x: body.position.x,
           y: body.position.y,
           z: body.position.z
         }));
-        console.log(`Worker created rope with ${initialPositions.length} segments`);
         self.postMessage({ 
           type: 'ropeCreated', 
           positions: initialPositions 
@@ -490,21 +482,20 @@ self.onmessage = function(e) {
         break;
         
       case 'resetRope':
-        console.log('Worker resetting rope');
         resetRope();
         isRopeFinalized = false; // Reset finalized flag
         self.postMessage({ type: 'ropeReset' });
         break;
         
       case 'createCoiler':
-        console.log(`Worker creating coiler: ${data.activeCoilerType}`);
         createCoiler(data.coilerConfig, data.activeCoilerType);
         createCoilerSides(data.coilerConfig, data.activeCoilerType);
         self.postMessage({ type: 'coilerCreated' });
         break;
         
       case 'addSegment':
-        console.log(`Worker adding segment for ${data.activeCoilerType}, current count: ${ropeBodies.length}, max: ${currentMaxSegments}`);
+        // Only log the segment count - this is the only log we want to keep
+        console.log(`Segments: ${ropeBodies.length}/${currentMaxSegments}`);
         
         if (ropeBodies.length < currentMaxSegments) {
           addRopeSegment(data.coilerConfig, data.activeCoilerType, currentMaxSegments);
@@ -551,7 +542,6 @@ self.onmessage = function(e) {
         break;
         
       case 'finalizeRope':
-        console.log('Worker finalizing rope');
         makeRopeBodiesStatic(); // This will set isRopeFinalized = true
         
         const finalPositions = ropeBodies.map(body => ({

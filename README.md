@@ -1,90 +1,70 @@
-# LR100 3D Configuration Tool
-
-An interactive 3D visualization tool for Taymer International LR100 product line, allowing customers to explore and configure cable winding and cutting equipment.
+# LR100-3D: Taymer Rope Coiler Simulator
 
 ## Overview
+LR100-3D is a browser-based 3D simulator for Taymer's line of rope coiling equipment. This interactive visualization allows users to configure and visualize different coiler models, reels, counters, and cutters in a physically accurate 3D environment.
 
-This application provides customers with an interactive way to:
-- View 3D models of the LR100 product line
-- Configure different components (reel stands, counters, coilers, and cutters)
-- See real-time pricing based on component selection
-- Visualize rope/cable winding physics
+## Features
 
-## Requirements
-
-- Node.js (v14+)
-- npm or yarn
-- Modern browser with WebGL support (Chrome, Firefox, Edge recommended)
-
-## Project Structure
-
-```
-LR100-3D/
-├── src/
-│   ├── assets/         # 3D models (GLTF) and textures
-│   ├── scripts/
-│   │   └── js/         # JavaScript source files
-│   └── styles/         # CSS files
-├── index.html          # Main HTML entry point
-└── README.md           # This documentation
-```
-
-## Development Setup
-
-### Using Node.js
-
-1. Set up Node.js environment:
-   ```
-   # In CMD (not PowerShell):
-   set PATH=C:\Users\{YOUR_USERNAME}\Documents\node-v22.13.1-win-x64;%PATH%
-   ```
-
-2. Launch the development server:
-   ```
-   cd LR100-3D
-   npx vite
-   ```
-
-3. Open the development server:
-   - Press `o` in the terminal when prompted
-   - Or navigate to the URL shown (typically http://localhost:5173)
-
-### Development Notes
-
-- The 3D environment is optimized for 16:9 aspect ratio
-- Physics simulation using cannon.js
-- 3D rendering with three.js
-- GLTF models imported from CAD files
+- **Interactive 3D Visualization**: Real-time rendering of rope coiling equipment
+- **Physics-Based Rope Simulation**: Realistic rope physics powered by Cannon.js
+- **Equipment Configuration**: Mix and match different reels, counters, cutters, and coilers
+- **Real-time Pricing**: Dynamic price calculations based on selected components
+- **High Performance**: Web Worker-based physics calculations for smooth operation
+- **Responsive Design**: Adapts to different screen sizes
 
 ## Technical Details
 
-### Libraries Used
+### Technologies Used
+- **Three.js**: For 3D rendering and scene management
+- **Cannon.js**: For physics simulation
+- **Node.js**: For running the app
+- **Web Workers**: For offloading physics calculations
+- **GLTFLoader**: For loading 3D models
 
-- **three.js**: 3D rendering engine
-- **cannon.js**: Physics engine for cable simulation
-- **vite**: Frontend build tool and dev server
+### Architecture
+The simulator uses a main thread for rendering and user interface, while a separate Web Worker handles physics calculations. This approach ensures smooth performance even with complex rope simulations involving hundreds of segments.
 
-### Key Features
+### Rope Physics
+The rope is modeled as a series of connected spherical bodies with distance constraints between them. The physics simulation handles:
+- Collision detection between rope and coiler
+- Realistic coiling behavior based on coiler geometry
+- Dynamic segment addition as the rope coils
 
-- **Physics-Based Cable Winding**: Realistic simulation of cable coiling
-- **Dynamic Component Loading**: GLTF models loaded based on user selection
-- **Interactive Controls**: Orbit camera, play/pause winding simulation
-- **Real-time Pricing**: Dynamic price calculations based on component selection
+### Coiler Models
+Each coiler model has unique physical properties:
+- **LR100-10**: Radius 0.189, supports 400 rope segments
+- **LR100-99**: Radius 0.155, supports 400 rope segments
+- **LR100-200**: Radius 0.105, supports 300 rope segments
 
-## Production Deployment
+## Usage
 
-Future plans include:
+1. Select a Reel Stand from the dropdown menu
+2. Select a Counter model
+3. Select a Coiler model
+4. Optionally, select a Cutter (requires a Counter to be selected)
+5. Watch the simulation run automatically
+6. Observe the current price calculated based on your selections
 
-1. Converting to WordPress plugin
-2. Integration with the Taymer International website
-3. Optimization for different devices and browsers
+## Browser Compatibility
 
-## Troubleshooting
+This application utilizes modern web technologies and requires:
+- WebGL 2.0 support
+- Web Workers support
+- A modern browser (Chrome, Firefox, Edge, Safari)
 
-- If you encounter import errors with Vite, ensure all import statements are at the top of the file
-- For physics glitches, try adjusting the parameters in the physics configuration
-- WebGL performance issues may require reducing the complexity of the rope simulation
+## Development Setup
+
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Start development server: `npm run dev`
+4. Build for production: `npm run build`
+
+## Project Structure
+
+- `src/scripts/js/main.js`: Main application logic and Three.js initialization
+- `src/scripts/js/physicsWorker.js`: Web Worker for physics calculations
+- `assets/`: 3D models and textures
 
 ## License
 
-Copyright © 2025 Taymer International. All rights reserved.
+Copyright © Taymer. All rights reserved.

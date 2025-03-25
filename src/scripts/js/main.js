@@ -50,12 +50,10 @@ function initPhysicsWorker() {
         
         switch(type) {
           case 'initialized':
-            console.log('Physics worker initialized');
             useWorker = true; // Only enable worker when initialization is confirmed
             break;
             
           case 'ropeCreated':
-            console.log('Rope created in worker');
             ropePositions = positions;
             createRopeMesh();
             break;
@@ -72,7 +70,6 @@ function initPhysicsWorker() {
             break;
             
           case 'ropeReset':
-            console.log('Rope reset in worker');
             ropePositions = [];
             ropeFinalized = false; // Ensure the flag is reset
             
@@ -87,7 +84,6 @@ function initPhysicsWorker() {
             break;
             
           case 'segmentLimitReached':
-            console.log('Segment limit reached, rope physics made static');
             ropePositions = positions;
             isPlaying = false;
             ropeFinalized = true; // Set our flag here as well
@@ -96,11 +92,9 @@ function initPhysicsWorker() {
               clearInterval(segmentTimer);
               segmentTimer = null;
             }
-            // Update UI or show a message if needed
             break;
             
           case 'ropeFinalized':
-            console.log('Rope finalized in worker');
             ropePositions = positions;
             ropeFinalized = true; // Mark as finalized
             
@@ -333,7 +327,6 @@ let activeCoilerType = "100-10";
 
 // Add this function to ensure complete reset when coiler changes
 function resetRopeCompletely() {
-  console.log("Complete rope reset - forced");
   ropeFinalized = false;
   isPlaying = false;
   
@@ -549,7 +542,6 @@ function checkAndCreateRope() {
   if (completeConfig()) {
     if (useWorker && physicsWorker) {
       if (ropePositions.length === 0 && !ropeFinalized) {
-        console.log("Creating rope - all components selected");
         physicsWorker.postMessage({ 
           type: 'createRope',
           data: { 
@@ -578,7 +570,6 @@ function checkAndCreateRope() {
     } else {
       // Original code for direct physics
       if (ropeBodies.length === 0) {
-        console.log("Creating rope - all components selected");
         createRopeSegments();
         if (!isPlaying) {
           isPlaying = true;
@@ -593,14 +584,12 @@ function checkAndCreateRope() {
   } else {
     if (useWorker) {
       if (ropePositions.length > 0) {
-        console.log("Removing rope - not all components selected");
         physicsWorker.postMessage({ type: 'resetRope' });
         ropePositions = [];
       }
     } else {
       // Original code
       if (ropeBodies.length > 0) {
-        console.log("Removing rope - not all components selected");
         resetRope();
       }
     }
@@ -1350,8 +1339,6 @@ function animate() {
         isPlaying = false;
         ropeFinalized = true;
 
-        console.log(`Rope reached max length (${maxSegments}) for ${activeCoilerType}, finalizing and stopping communication`);
-        
         // Final communication with worker
         physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
         physicsWorker.postMessage({ 
