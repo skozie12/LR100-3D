@@ -1,4 +1,4 @@
-# LR100-3D: Taymer Rope Coiler Simulator
+# LR100-3D: Product Configurator
 
 ## Overview
 LR100-3D is a browser-based 3D simulator for Taymer's line of rope coiling equipment. This interactive visualization allows users to configure and visualize different coiler models, reels, counters, and cutters in a physically accurate 3D environment.
