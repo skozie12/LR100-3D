@@ -9,7 +9,7 @@ LR100-3D is a browser-based 3D simulator for Taymer's line of rope coiling equip
 - **Physics-Based Rope Simulation**: Realistic rope physics powered by Cannon.js
 - **Equipment Configuration**: Mix and match different reels, counters, cutters, and coilers
 - **Real-time Pricing**: Dynamic price calculations based on selected components
-- **High Performance**: Web Worker-based physics calculations for smooth operation
+- **High Performance**: Web Worker-based physics calculations for smooth operation 
 - **Responsive Design**: Adapts to different screen sizes
 
 ## Technical Details
