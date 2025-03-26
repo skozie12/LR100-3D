@@ -1,5 +1,7 @@
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion } from 'cannon-es';
 
+
+
 // Physics constants
 let world;
 let defaultMaterial;
@@ -33,6 +35,11 @@ let isAnimationStarted = false;
 
 // Add a variable to track the current max segments based on coiler type
 let currentMaxSegments = 400; // Default, will be updated with messages
+
+// Add accumulator variables for fixed timestep
+const fixedTimeStep = 1/60; // Physics at 60Hz for better precision
+let accumulator = 0;
+let physicsTime = 0;
 
 // Initialize the physics world
 function initPhysics() {
@@ -151,6 +158,10 @@ function resetRope() {
     addedSegments = 0;
     currentDirection = 1;
     currentZ = 0;
+
+    // Reset physics time tracking
+    accumulator = 0;
+    physicsTime = 0;
   } catch (err) {
     console.error("Error in resetRope:", err);
   }
@@ -186,12 +197,15 @@ function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
       const dist = Math.sqrt(dx*dx + dy*dy);
       
       if (dist > 0.1) {
-        newBody.velocity.set(dx * 0.02, dy * 0.02, 0);
+        // Higher initial velocity for stronger attachment to coiler
+        // This helps with stability at 30fps physics
+        newBody.velocity.set(dx * 0.06, dy * 0.06, 0);
       }
     }
     
-    newBody.angularDamping = 0.95;
-    newBody.linearDamping = 0.95;
+    // Higher damping for more stability at 30fps
+    newBody.angularDamping = 0.98;
+    newBody.linearDamping = 0.98;
     world.addBody(newBody);
     
     // Remove existing constraints between segments 10 and 11
@@ -285,6 +299,7 @@ function createCoiler(config, activeCoilerType) {
     const y = coilerRadius * 0.97 * Math.sin(angle);
     
     const bumpShape = new Sphere(bumpRadius);
+    // Removed incorrect ThreeMFLoader line
     coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
   }
   
@@ -363,8 +378,9 @@ function updateAnchorPosition(x, y, z) {
   }
 }
 
-// Set coiler rotation speed
+// Fix setCoilerRotation to use a consistent rotation speed
 function setCoilerRotation(rotationSpeed) {
+  // IMPORTANT: Apply rotation speed directly without any scaling
   if (coilerBody) {
     coilerBody.angularVelocity.set(0, 0, rotationSpeed);
   }
@@ -374,6 +390,37 @@ function setCoilerRotation(rotationSpeed) {
   if (coilerBodySide2) {
     coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
   }
+}
+
+// Remove the physics accumulator and return to simpler fixed stepping
+// let physicsTimeAccumulator = 0;
+// const fixedTimeStep = 1/120;
+
+// Modify stepPhysics to implement fixed timestep physics steps
+function stepPhysics(timeStep, subSteps, maxSegments) {
+  // Use the provided maxSegments or fall back to currentMaxSegments
+  const segmentLimit = maxSegments || currentMaxSegments;
+  
+  if (ropeBodies.length >= segmentLimit) {
+    // Convert all rope bodies to static first time we hit the limit
+    if (ropeBodies[0].type !== BODY_TYPES.STATIC) {
+      makeRopeBodiesStatic();
+    }
+  }
+  
+  // Use consistent time step with appropriate substeps for 60fps physics
+  for (let i = 0; i < subSteps; i++) {
+    world.step(timeStep / subSteps);
+  }
+  
+  // Get positions of all physics bodies
+  const positions = ropeBodies.map(body => ({
+    x: body.position.x,
+    y: body.position.y,
+    z: body.position.z
+  }));
+  
+  return positions;
 }
 
 // Update makeRopeBodiesStatic function to set the flag
@@ -407,32 +454,6 @@ function makeRopeBodiesStatic() {
     anchor.type = BODY_TYPES.STATIC;
     anchor.updateMassProperties();
   }
-}
-
-// Update stepPhysics to use the max segments parameter
-function stepPhysics(timeStep, subSteps, maxSegments) {
-  // Use the provided maxSegments or fall back to currentMaxSegments
-  const segmentLimit = maxSegments || currentMaxSegments;
-  
-  if (ropeBodies.length >= segmentLimit) {
-    // Convert all rope bodies to static first time we hit the limit
-    if (ropeBodies[0].type !== BODY_TYPES.STATIC) {
-      makeRopeBodiesStatic();
-    }
-  }
-  
-  for (let i = 0; i < subSteps; i++) {
-    world.step(timeStep / subSteps);
-  }
-  
-  // Get positions of all physics bodies
-  const positions = ropeBodies.map(body => ({
-    x: body.position.x,
-    y: body.position.y,
-    z: body.position.z
-  }));
-  
-  return positions;
 }
 
 // Update message handler to minimize console output
@@ -484,6 +505,9 @@ self.onmessage = function(e) {
       case 'resetRope':
         resetRope();
         isRopeFinalized = false; // Reset finalized flag
+        // Also reset physics time trackers
+        accumulator = 0;
+        physicsTime = 0;
         self.postMessage({ type: 'ropeReset' });
         break;
         
@@ -529,15 +553,18 @@ self.onmessage = function(e) {
         break;
         
       case 'setRotation':
+        // Remove delta time parameter
         setCoilerRotation(data.rotationSpeed);
         break;
         
       case 'step':
+        // Always use the provided timestep (which should be fixedTimeStep from main thread)
         const positions = stepPhysics(data.timeStep, data.subSteps, currentMaxSegments);
         self.postMessage({
           type: 'stepped',
           positions: positions,
-          count: ropeBodies.length
+          count: ropeBodies.length,
+          physicsTime: physicsTime
         });
         break;
         
