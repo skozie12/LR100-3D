@@ -41,6 +41,12 @@ const fixedTimeStep = 1/60; // Physics at 60Hz for better precision
 let accumulator = 0;
 let physicsTime = 0;
 
+// Add rotation tracking variables
+let coilerAngle = 0;
+let segmentsPerRotation = 8; // Reduced from 12 to 8 for fewer segments per rotation
+let segmentAngleInterval = (Math.PI * 2) / segmentsPerRotation;
+let lastSegmentAngle = 0;
+
 // Initialize the physics world
 function initPhysics() {
   world = new World({
@@ -138,7 +144,7 @@ function createRopeSegments() {
 }
 
 // Reset the rope physics
-function resetRope() {
+function resetRope(resetAngle = false) {
   try {
     isRopeFinalized = false; // Make sure flag is reset
     
@@ -162,13 +168,19 @@ function resetRope() {
     // Reset physics time tracking
     accumulator = 0;
     physicsTime = 0;
+
+    // Reset angle tracking if requested
+    if (resetAngle) {
+      coilerAngle = 0;
+      lastSegmentAngle = 0;
+    }
   } catch (err) {
     console.error("Error in resetRope:", err);
   }
 }
 
 // Update addRopeSegment function to use the max segments parameter
-function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
+function addRopeSegment(coilerConfig, activeCoilerType, maxSegments, rotationAngle) {
   try {
     // Use the provided maxSegments or fall back to the default
     const segmentLimit = maxSegments || (activeCoilerType === "100-200" ? 300 : 400);
@@ -176,6 +188,19 @@ function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
     if (ropeBodies.length >= segmentLimit) return;
     if (ropeBodies.length < 11) return;
     
+    // Only add segment if we've rotated enough since last segment
+    // or if it's one of the first segments
+    if (rotationAngle !== undefined && 
+        ropeBodies.length >= segmentCount && 
+        Math.abs(rotationAngle - lastSegmentAngle) < segmentAngleInterval) {
+      return;
+    }
+    
+    // Update last segment angle
+    if (rotationAngle !== undefined) {
+      lastSegmentAngle = rotationAngle;
+    }
+
     const anchorEndIndex = ropeBodies.length - 1;
     const baseSegment = ropeBodies[10];
     const newBody = new Body({ 
@@ -191,15 +216,24 @@ function addRopeSegment(coilerConfig, activeCoilerType, maxSegments) {
       collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
     });
     
+    // Use stronger impulse toward coiler for better wrapping at slower rotation speeds
     if (coilerBody) {
       const dx = coilerBody.position.x - baseSegment.position.x;
       const dy = coilerBody.position.y - baseSegment.position.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
       
       if (dist > 0.1) {
-        // Higher initial velocity for stronger attachment to coiler
-        // This helps with stability at 30fps physics
-        newBody.velocity.set(dx * 0.06, dy * 0.06, 0);
+        // Stronger velocity for slower rotation - needs more "pull" with slower coiler
+        const velMultiplier = 0.15; // Increased from 0.1
+        newBody.velocity.set(dx * velMultiplier, dy * velMultiplier, 0);
+        
+        // Add tangential component based on rotation
+        if (coilerBody.angularVelocity.z !== 0) {
+          // Stronger tangential force at slower speeds
+          const tangentialScale = 0.1 * Math.abs(coilerBody.angularVelocity.z); // Increased from 0.05
+          newBody.velocity.x -= dy * tangentialScale;
+          newBody.velocity.y += dx * tangentialScale;
+        }
       }
     }
     
@@ -379,8 +413,13 @@ function updateAnchorPosition(x, y, z) {
 }
 
 // Fix setCoilerRotation to use a consistent rotation speed
-function setCoilerRotation(rotationSpeed) {
-  // IMPORTANT: Apply rotation speed directly without any scaling
+function setCoilerRotation(rotationSpeed, angle) {
+  // Update tracked angle if provided
+  if (angle !== undefined) {
+    coilerAngle = angle;
+  }
+  
+  // Apply rotation speed directly to physics bodies
   if (coilerBody) {
     coilerBody.angularVelocity.set(0, 0, rotationSpeed);
   }
@@ -397,7 +436,7 @@ function setCoilerRotation(rotationSpeed) {
 // const fixedTimeStep = 1/120;
 
 // Modify stepPhysics to implement fixed timestep physics steps
-function stepPhysics(timeStep, subSteps, maxSegments) {
+function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, rotationAngle) {
   // Use the provided maxSegments or fall back to currentMaxSegments
   const segmentLimit = maxSegments || currentMaxSegments;
   
@@ -408,10 +447,18 @@ function stepPhysics(timeStep, subSteps, maxSegments) {
     }
   }
   
+  // Update coiler angle if provided
+  if (rotationAngle !== undefined) {
+    coilerAngle = rotationAngle;
+  }
+  
   // Use consistent time step with appropriate substeps for 60fps physics
   for (let i = 0; i < subSteps; i++) {
     world.step(timeStep / subSteps);
   }
+  
+  // Apply additional stabilization to segments around coiler
+  stabilizeSegmentsOnCoiler(rotationSpeed);
   
   // Get positions of all physics bodies
   const positions = ropeBodies.map(body => ({
@@ -421,6 +468,45 @@ function stepPhysics(timeStep, subSteps, maxSegments) {
   }));
   
   return positions;
+}
+
+// Enhance stabilizeSegmentsOnCoiler to use rotation speed and apply tangential forces
+function stabilizeSegmentsOnCoiler(rotationSpeed) {
+  if (!coilerBody || ropeBodies.length <= 20) return;
+  
+  // Get current coiler rotation rate
+  const actualRotationSpeed = rotationSpeed !== undefined ? 
+    rotationSpeed : 
+    (coilerBody.angularVelocity ? coilerBody.angularVelocity.z : 0);
+  
+  for (let i = 20; i < ropeBodies.length; i++) {
+    const body = ropeBodies[i];
+    const dx = coilerBody.position.x - body.position.x;
+    const dy = coilerBody.position.y - body.position.y;
+    const dz = coilerBody.position.z - body.position.z;
+    const distSq = dx*dx + dy*dy;
+    
+    if (distSq < 0.05) { // Segments close to the coiler
+      // Higher damping for stability
+      body.velocity.scale(0.7); // Increased damping (from 0.8)
+      body.angularVelocity.scale(0.7);
+      
+      // Stronger attraction force toward coiler center for slower rotation
+      const attractionStrength = 1.5; // Increased from 1.0
+      body.applyForce(
+        new Vec3(dx * attractionStrength, dy * attractionStrength, dz * 0.5),
+        new Vec3(0, 0, 0)
+      );
+      
+      // Stronger tangential force for slower rotation to ensure wrapping
+      if (actualRotationSpeed !== 0) {
+        const tangentialStrength = 1.2 * Math.abs(actualRotationSpeed); // Increased from 0.8
+        // Tangential direction is perpendicular to radius vector
+        const tangentialForce = new Vec3(-dy * tangentialStrength, dx * tangentialStrength, 0);
+        body.applyForce(tangentialForce, new Vec3(0, 0, 0));
+      }
+    }
+  }
 }
 
 // Update makeRopeBodiesStatic function to set the flag
@@ -522,7 +608,13 @@ self.onmessage = function(e) {
         console.log(`Segments: ${ropeBodies.length}/${currentMaxSegments}`);
         
         if (ropeBodies.length < currentMaxSegments) {
-          addRopeSegment(data.coilerConfig, data.activeCoilerType, currentMaxSegments);
+          // Pass rotation angle to addRopeSegment
+          addRopeSegment(
+            data.coilerConfig, 
+            data.activeCoilerType, 
+            currentMaxSegments,
+            data.rotationAngle
+          );
         }
         
         if (ropeBodies.length >= currentMaxSegments && ropeBodies[0].type !== BODY_TYPES.STATIC) {
@@ -553,13 +645,20 @@ self.onmessage = function(e) {
         break;
         
       case 'setRotation':
-        // Remove delta time parameter
-        setCoilerRotation(data.rotationSpeed);
+        // Pass angle to setCoilerRotation
+        setCoilerRotation(data.rotationSpeed, data.rotationAngle);
         break;
         
       case 'step':
         // Always use the provided timestep (which should be fixedTimeStep from main thread)
-        const positions = stepPhysics(data.timeStep, data.subSteps, currentMaxSegments);
+        // Pass rotation info to stepPhysics
+        const positions = stepPhysics(
+          data.timeStep, 
+          data.subSteps, 
+          currentMaxSegments,
+          data.rotationSpeed,
+          data.rotationAngle
+        );
         self.postMessage({
           type: 'stepped',
           positions: positions,

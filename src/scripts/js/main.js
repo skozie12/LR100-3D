@@ -19,7 +19,12 @@ let previousRopePositions = []; // For interpolation
 
 // Add new variables for delta-time based segment creation
 let segmentAccumulator = 0.0;
-const segmentAddInterval = 0.135; // 135ms converted to seconds
+const segmentAddInterval = 0.2; // Increased from 0.135 to 0.2 for slower segment addition
+
+// Track total coiler rotation for segment creation
+let coilerAngle = 0;
+let segmentsPerRotation = 12; // Create 12 segments per full rotation
+const segmentAngleInterval = (Math.PI * 2) / segmentsPerRotation; // Angle between segments
 
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
@@ -342,8 +347,14 @@ function resetRopeCompletely() {
   ropeFinalized = false;
   isPlaying = false;
   
+  // Reset angle tracking
+  coilerAngle = 0;
+  
   if (useWorker && physicsWorker) {
-    physicsWorker.postMessage({ type: 'resetRope' });
+    physicsWorker.postMessage({ 
+      type: 'resetRope', 
+      data: { resetAngle: true } 
+    });
     ropePositions = [];
     
     if (ropeMeshes.length > 0) {
@@ -1320,7 +1331,7 @@ function createFloorCoil() {
   scene.add(floorCoilMesh);
 }
 
-// Fix the animate function to add segments based on delta time
+// Fix the animate function to properly coordinate rotation and segment creation with slower rotation
 function animate() {
   requestAnimationFrame(animate);
   
@@ -1359,7 +1370,6 @@ function animate() {
     }
     
     if (useWorker && physicsWorker) {
-      // Use the function to get the right segment limit based on coiler type
       const maxSegments = getMaxSegments(activeCoilerType);
       
       // Check if we need to transition to static state
@@ -1392,19 +1402,40 @@ function animate() {
           // Run fixed steps at exactly 60fps
           let stepsTaken = 0;
           while (accumulator >= fixedTimeStep && stepsTaken < 3) { // Limit steps to avoid spiral of death
+            // Calculate rotation increment for this step - SLOWER ROTATION SPEED
+            const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2 (less than half speed)
+            const sizeRatio = 0.2 / coilerRadius;
+            const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+            
+            // Calculate angle increment for this physics step
+            const angleIncrement = rotationSpeed * fixedTimeStep;
+            
+            // Update cumulative angle
+            coilerAngle += angleIncrement;
+            
+            // Add segment based on rotation angle (not time)
+            if (Math.abs(coilerAngle) >= segmentAngleInterval * (ropePositions.length - segmentCount)) {
+              physicsWorker.postMessage({ 
+                type: 'addSegment',
+                data: {
+                  coilerConfig: COILER_CONFIG,
+                  activeCoilerType: activeCoilerType,
+                  maxSegments: maxSegments,
+                  rotationAngle: coilerAngle
+                }
+              });
+            }
+            
+            // Step physics with current rotation speed
             physicsWorker.postMessage({ 
               type: 'step',
               data: {
-                timeStep: fixedTimeStep, // Locked at 1/60 seconds
-                subSteps: 4     // Use 4 substeps for 60fps (equivalent to 6 substeps at 30fps)
+                timeStep: fixedTimeStep,
+                subSteps: 4,
+                rotationSpeed: rotationSpeed,
+                rotationAngle: coilerAngle
               }
             });
-            
-            // Constant rotation rate exactly matching the physics rate
-            const baseRotationSpeed = -2.8;
-            const sizeRatio = 0.2 / coilerRadius;
-            const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-            physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: rotationSpeed } });
             
             // Update timers
             accumulator -= fixedTimeStep;
@@ -1432,7 +1463,8 @@ function animate() {
       
       // Visual rotations happen regardless of physics stepping
       if (isPlaying && completeConfig()) {
-        updateVisualRotations(deltaTime);
+        // Use consistent rotation based on physics time, not delta time
+        updateVisualRotationsFromPhysics(physicsTime);
       }
       
       // When we have positions to interpolate and render
@@ -1470,8 +1502,8 @@ function animate() {
           world.step(1/60 / subSteps); // Fixed step of 1/60 with 10 substeps
         }
         
-        // Set proper rotation speeds
-        const baseRotationSpeed = -2.8;
+        // Set proper rotation speeds - SLOWER ROTATION
+        const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2
         const sizeRatio = 0.2 / coilerRadius;
         const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
         
@@ -1602,31 +1634,32 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
   geometry.computeBoundingSphere();
 }
 
-// Keep the updateVisualRotations function with delta time - this works well
-function updateVisualRotations(dt) {
-  // Base rotation speed adjusted for delta time
-  const baseRotationSpeed = 0.016 * Math.min(0.2 / coilerRadius, 1.5);
-  const visualRotation = baseRotationSpeed * 60 * dt; // Scale by delta time (normalized to 60fps)
+// Update the visual rotation function to match the slower physics rotation
+function updateVisualRotationsFromPhysics(time) {
+  // Calculate rotation based on coilerAngle instead of delta time
+  const baseRotationSpeed = -1.2; // Match the new slower rotation speed
+  const sizeRatio = Math.min(0.2 / coilerRadius, 1.5);
+  const rotationAmount = coilerAngle * sizeRatio;
   
   if (coilerBodyMesh) {
-    coilerBodyMesh.rotation.z -= visualRotation;
+    coilerBodyMesh.rotation.z = rotationAmount;
   }
   
   if (spoolModel && counterModel) {
-    spoolModel.rotation.y -= visualRotation;
-    if (floorCoilMesh) floorCoilMesh.rotation.y -= visualRotation;
+    spoolModel.rotation.y = -rotationAmount;
+    if (floorCoilMesh) floorCoilMesh.rotation.y = -rotationAmount;
   }
   
   if (coilerBodyMeshSide1) {
-    coilerBodyMeshSide1.rotation.z -= visualRotation;
+    coilerBodyMeshSide1.rotation.z = rotationAmount;
   }
   
   if (coilerBodyMeshSide2) {
-    coilerBodyMeshSide2.rotation.z -= visualRotation;
+    coilerBodyMeshSide2.rotation.z = rotationAmount;
   }
   
   if (movingModel) {
-    movingModel.rotation.z += visualRotation;
+    movingModel.rotation.z = -rotationAmount;
   }
 }
 
