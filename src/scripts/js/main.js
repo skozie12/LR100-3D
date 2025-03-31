@@ -56,6 +56,32 @@ dirLight.position.set(0, 5, 4);
 dirLight.castShadow = true;
 scene.add(dirLight);
 
+// Remove debug display by making these functions no-ops
+function addDebugDisplay() {
+  // Return a dummy object that ignores all operations
+  return {
+    appendChild: () => {},
+    removeChild: () => {},
+    childNodes: { length: 0 }
+  };
+}
+
+// Make showDebugMessage not display anything on screen but still log to console
+function showDebugMessage(message, type = 'debug') {
+  // Only log to console, don't show in UI
+  if (type === 'error') {
+    console.error(`[Debug] ${message}`);
+  } else if (type === 'warning') {
+    console.warn(`[Debug] ${message}`);
+  } else if (type === 'success') {
+    console.log(`%c[Debug] ${message}`, 'color: green');
+  } else {
+    console.log(`[Debug] ${message}`);
+  }
+}
+
+const debugDisplay = addDebugDisplay();
+
 // Initialize the physics worker
 function initPhysicsWorker() {
   if (window.Worker) {
@@ -63,7 +89,7 @@ function initPhysicsWorker() {
       physicsWorker = new Worker(new URL('./physicsWorker.js', import.meta.url), { type: 'module' });
       
       physicsWorker.onmessage = function(e) {
-        const { type, positions, count, error } = e.data;
+        const { type, positions, count, staticCount, error, message, debugType } = e.data;
         
         switch(type) {
           case 'initialized':
@@ -84,6 +110,8 @@ function initPhysicsWorker() {
             if (ropePositions.length > 0 && ropeMeshes.length > 0) {
               updateRopeGeometryFromWorker();
             }
+            
+            // Remove UI display of static count but keep in console for debugging
             break;
             
           case 'ropeReset':
@@ -120,6 +148,17 @@ function initPhysicsWorker() {
               updateRopeGeometryFromWorker();
             }
             break;
+            
+          // Add handler for debug messages
+          case 'debug':
+            showDebugMessage(message, debugType);
+            break;
+            
+          // Track errors better
+          case 'error':
+            showDebugMessage(`Physics Error: ${error}`, 'error');
+            console.error("Physics worker error:", error);
+            break;
         }
       };
       
@@ -131,11 +170,11 @@ function initPhysicsWorker() {
       // Initialize the physics in the worker
       physicsWorker.postMessage({ type: 'init' });
     } catch (err) {
-      console.error("Failed to initialize physics worker:", err);
+      console.error("Failed to initialize physics worker: " + err);
       useWorker = false;
     }
   } else {
-    console.warn('Web Workers not supported in this browser. Using direct physics instead.');
+    console.error('Web Workers not supported in this browser');
     useWorker = false;
   }
 }
@@ -349,11 +388,15 @@ function resetRopeCompletely() {
   
   // Reset angle tracking
   coilerAngle = 0;
+  frameCounter = 0;
   
   if (useWorker && physicsWorker) {
     physicsWorker.postMessage({ 
       type: 'resetRope', 
-      data: { resetAngle: true } 
+      data: { 
+        resetAngle: true,
+        resetSegmentTracking: true 
+      }
     });
     ropePositions = [];
     
@@ -1331,247 +1374,234 @@ function createFloorCoil() {
   scene.add(floorCoilMesh);
 }
 
+// Add a frame counter for tracking segment age
+let frameCounter = 0;
+
 // Fix the animate function to properly coordinate rotation and segment creation with slower rotation
 function animate() {
   requestAnimationFrame(animate);
   
-  // Calculate delta time
-  const currentTime = performance.now();
-  deltaTime = (currentTime - lastFrameTime) / 1000; // Convert to seconds
-  lastFrameTime = currentTime;
-  
-  // Clamp delta time to avoid large jumps when tab becomes inactive/active
-  deltaTime = Math.min(deltaTime, 0.1); 
-  
   try {
-    // Accumulate time for physics steps
+    // Calculate delta time for this frame
+    const now = performance.now();
+    deltaTime = Math.min(0.1, (now - lastFrameTime) / 1000); // Cap at 100ms
+    lastFrameTime = now;
+    
+    // Increase frame counter
+    frameCounter++;
+    
+    // Update accumulator for fixed timestep physics
     accumulator += deltaTime;
     
-    // Accumulate time for segment creation
-    segmentAccumulator += deltaTime;
-    
-    // Create segments based on delta time
-    if (isPlaying && completeConfig() && !ropeFinalized && segmentAccumulator >= segmentAddInterval) {
+    // Add this block to check for control key and increase/decrease coilerRadius
+    if (isPlaying) {
+      // Handle physics differently depending on whether we're using the worker
       if (useWorker && physicsWorker) {
-        physicsWorker.postMessage({ 
-          type: 'addSegment',
-          data: {
-            coilerConfig: COILER_CONFIG,
-            activeCoilerType: activeCoilerType,
-            maxSegments: getMaxSegments(activeCoilerType)
-          }
-        });
-      } else if (!useWorker) {
-        addRopeSegment();
-      }
-      
-      // Reset segment accumulator, keeping remainder for more accurate timing
-      segmentAccumulator -= segmentAddInterval;
-    }
-    
-    if (useWorker && physicsWorker) {
-      const maxSegments = getMaxSegments(activeCoilerType);
-      
-      // Check if we need to transition to static state
-      if (ropePositions.length > maxSegments - 1 && isPlaying) {
-        isPlaying = false;
-        ropeFinalized = true;
-
-        // Final communication with worker
-        physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
-        physicsWorker.postMessage({ 
-          type: 'finalizeRope',
-          data: { 
-            maxSegments: maxSegments 
-          }
-        });
-        
-        if (segmentTimer) {
-          clearInterval(segmentTimer);
-          segmentTimer = null;
-        }
-      }
-      
-      // Only communicate with worker if rope is NOT finalized
-      if (!ropeFinalized) {
-        // Worker-based physics - only if playing AND all components are selected
-        if (isPlaying && completeConfig()) {
-          // Save previous positions before running any steps
-          previousRopePositions = [...ropePositions];
-          
-          // Run fixed steps at exactly 60fps
-          let stepsTaken = 0;
-          while (accumulator >= fixedTimeStep && stepsTaken < 3) { // Limit steps to avoid spiral of death
-            // Calculate rotation increment for this step - SLOWER ROTATION SPEED
-            const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2 (less than half speed)
-            const sizeRatio = 0.2 / coilerRadius;
-            const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-            
-            // Calculate angle increment for this physics step
-            const angleIncrement = rotationSpeed * fixedTimeStep;
-            
-            // Update cumulative angle
-            coilerAngle += angleIncrement;
-            
-            // Add segment based on rotation angle (not time)
-            if (Math.abs(coilerAngle) >= segmentAngleInterval * (ropePositions.length - segmentCount)) {
-              physicsWorker.postMessage({ 
-                type: 'addSegment',
-                data: {
-                  coilerConfig: COILER_CONFIG,
-                  activeCoilerType: activeCoilerType,
-                  maxSegments: maxSegments,
-                  rotationAngle: coilerAngle
-                }
-              });
-            }
-            
-            // Step physics with current rotation speed
-            physicsWorker.postMessage({ 
-              type: 'step',
-              data: {
-                timeStep: fixedTimeStep,
-                subSteps: 4,
-                rotationSpeed: rotationSpeed,
-                rotationAngle: coilerAngle
-              }
-            });
-            
-            // Update timers
-            accumulator -= fixedTimeStep;
-            physicsTime += fixedTimeStep;
-            stepsTaken++;
-          }
-          
-          // Update dummy anchor position once per frame
-          if (dummy) {
-            dummy.getWorldPosition(temp);
-            physicsWorker.postMessage({ 
-              type: 'updateAnchor',
-              data: {
-                x: temp.x,
-                y: temp.y,
-                z: temp.z
-              }
-            });
-          }
-        } else if (!isPlaying || !completeConfig()) {
-          // If not playing or not all components selected, stop coiler rotation
-          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
-        }
-      }
-      
-      // Visual rotations happen regardless of physics stepping
-      if (isPlaying && completeConfig()) {
-        // Use consistent rotation based on physics time, not delta time
-        updateVisualRotationsFromPhysics(physicsTime);
-      }
-      
-      // When we have positions to interpolate and render
-      if (ropePositions.length > 0 && previousRopePositions.length === ropePositions.length && ropeMeshes.length > 0) {
-        // Calculate alpha for interpolation (0 to 1)
-        const alpha = accumulator / fixedTimeStep;
-        
-        // Create interpolated positions
-        const interpolatedPositions = ropePositions.map((current, i) => {
-          if (i < previousRopePositions.length) {
-            const prev = previousRopePositions[i];
-            return {
-              x: prev.x + alpha * (current.x - prev.x),
-              y: prev.y + alpha * (current.y - prev.y),
-              z: prev.z + alpha * (current.z - prev.z)
-            };
-          }
-          return current; // Fall back to current if no previous available
-        });
-        
-        // Update the mesh with interpolated positions
-        updateRopeGeometryFromInterpolatedPositions(interpolatedPositions);
-      }
-    } else {
-      // Direct physics implementation
-      const subSteps = 4; // Use 4 substeps for 60fps physics
-      
-      // Get the right max segments for this coiler type
-      const maxSegments = getMaxSegments(activeCoilerType);
-      
-      // Only step physics if playing
-      if (isPlaying && completeConfig()) {
-        // Use a fixed time step for consistent physics
-        for (let i = 0; i < subSteps; i++) {
-          world.step(1/60 / subSteps); // Fixed step of 1/60 with 10 substeps
-        }
-        
-        // Set proper rotation speeds - SLOWER ROTATION
-        const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2
-        const sizeRatio = 0.2 / coilerRadius;
-        const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-        
-        if (coilerBody) {
-          coilerBody.angularVelocity.set(0, 0, rotationSpeed);
-        }
-        if (coilerBodySide1) {
-          coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
-        }
-        if (coilerBodySide2) {
-          coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
-        }
-        
-        // Check for segment limit
-        if (ropeBodies.length > maxSegments - 1) {
-          isPlaying = false;
+        // Check if rope has reached max segments and should be finalized
+        const maxSegments = getMaxSegments(activeCoilerType);
+        if (ropePositions.length >= maxSegments && !ropeFinalized) {
           ropeFinalized = true;
-          coilerBody.angularVelocity.set(0, 0, 0);
-          if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
-          if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
+          physicsWorker.postMessage({ 
+            type: 'finalizeRope',
+            data: { 
+              maxSegments: maxSegments 
+            }
+          });
           
-          // Make all rope bodies static instead of removing them
-          for (let i = 0; i < ropeBodies.length; i++) {
-            const body = ropeBodies[i];
-            body.type = BODY_TYPES.STATIC;
-            body.mass = 0;
-            body.updateMassProperties();
-            body.velocity.set(0, 0, 0);
-            body.angularVelocity.set(0, 0, 0);
-            body.force.set(0, 0, 0);
-            body.torque.set(0, 0, 0);
-          }
-          
-          // Save the current rope shape
-          updateRopeCurve();
-          
-          // Clean up existing timer
           if (segmentTimer) {
             clearInterval(segmentTimer);
             segmentTimer = null;
           }
         }
         
-        accumulator -= fixedTimeStep;
-        physicsTime += fixedTimeStep;
-      }
-      
-      // Handle anchor position updates independently of physics steps
-      if (dummy) {
-        dummy.getWorldPosition(temp);
-        anchorEnd.position.x = temp.x;
-        anchorEnd.position.y = temp.y;
-        anchorEnd.position.z = temp.z;
-        anchorEnd.velocity.set(0, 0, 0);
-        anchorEnd.angularVelocity.set(0, 0, 0);
-        const lastSegmentCount = 10;
-        for (let i = Math.max(0, ropeBodies.length - lastSegmentCount); i < ropeBodies.length; i++) {
-          ropeBodies[i].velocity.scale(0.9);
-          ropeBodies[i].angularVelocity.scale(0.9);
+        // Only communicate with worker if rope is NOT finalized
+        if (!ropeFinalized) {
+          // Worker-based physics - only if playing AND all components are selected
+          if (isPlaying && completeConfig()) {
+            // Save previous positions before running any steps
+            previousRopePositions = [...ropePositions];
+            
+            // Run fixed steps at exactly 60fps
+            let stepsTaken = 0;
+            while (accumulator >= fixedTimeStep && stepsTaken < 3) { // Limit steps to avoid spiral of death
+              // Calculate rotation increment for this step - SLOWER ROTATION SPEED
+              const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2 (less than half speed)
+              const sizeRatio = 0.2 / coilerRadius;
+              const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+              
+              // Calculate angle increment for this physics step
+              const angleIncrement = rotationSpeed * fixedTimeStep;
+              
+              // Update cumulative angle
+              coilerAngle += angleIncrement;
+              
+              // Add segment based on rotation angle (not time)
+              if (Math.abs(coilerAngle) >= segmentAngleInterval * (ropePositions.length - segmentCount)) {
+                console.log(`Adding segment at angle ${coilerAngle.toFixed(3)}, threshold: ${segmentAngleInterval * (ropePositions.length - segmentCount).toFixed(3)}`);
+                physicsWorker.postMessage({ 
+                  type: 'addSegment',
+                  data: {
+                    coilerConfig: COILER_CONFIG,
+                    activeCoilerType: activeCoilerType,
+                    maxSegments: maxSegments,
+                    rotationAngle: coilerAngle,
+                    frameCreated: frameCounter // Pass current frame for segment age tracking
+                  }
+                });
+              }
+              
+              // Step physics with current rotation speed and frame counter
+              physicsWorker.postMessage({ 
+                type: 'step',
+                data: {
+                  timeStep: fixedTimeStep,
+                  subSteps: 4,
+                  rotationSpeed: rotationSpeed,
+                  rotationAngle: coilerAngle,
+                  currentFrame: frameCounter // Pass current frame for age-based static conversion
+                }
+              });
+              
+              // Update timers
+              accumulator -= fixedTimeStep;
+              physicsTime += fixedTimeStep;
+              stepsTaken++;
+            }
+            
+            // Update dummy anchor position once per frame
+            if (dummy) {
+              dummy.getWorldPosition(temp);
+              physicsWorker.postMessage({ 
+                type: 'updateAnchor',
+                data: {
+                  x: temp.x,
+                  y: temp.y,
+                  z: temp.z
+                }
+              });
+            }
+          } else if (!isPlaying || !completeConfig()) {
+            // If not playing or not all components selected, stop coiler rotation
+            physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+          }
         }
-      }
-      
-      // Always update the rope geometry if we have bodies
-      if (ropeBodies.length > 0) {
-        if (ropeMeshes.length > 0 && ropeMeshes[0]) {
-          updateRopeGeometry();
-        } else {
-          createRopeMesh();
+        
+        // Visual rotations happen regardless of physics stepping
+        if (isPlaying && completeConfig()) {
+          // Use consistent rotation based on physics time, not delta time
+          updateVisualRotationsFromPhysics(physicsTime);
+        }
+        
+        // When we have positions to interpolate and render
+        if (ropePositions.length > 0 && previousRopePositions.length === ropePositions.length && ropeMeshes.length > 0) {
+          // Calculate alpha for interpolation (0 to 1)
+          const alpha = accumulator / fixedTimeStep;
+          
+          // Create interpolated positions
+          const interpolatedPositions = ropePositions.map((current, i) => {
+            if (i < previousRopePositions.length) {
+              const prev = previousRopePositions[i];
+              return {
+                x: prev.x + alpha * (current.x - prev.x),
+                y: prev.y + alpha * (current.y - prev.y),
+                z: prev.z + alpha * (current.z - prev.z)
+              };
+            }
+            return current; // Fall back to current if no previous available
+          });
+          
+          // Update the mesh with interpolated positions
+          updateRopeGeometryFromInterpolatedPositions(interpolatedPositions);
+        }
+      } else {
+        // Direct physics implementation
+        const subSteps = 4; // Use 4 substeps for 60fps physics
+        
+        // Get the right max segments for this coiler type
+        const maxSegments = getMaxSegments(activeCoilerType);
+        
+        // Only step physics if playing
+        if (isPlaying && completeConfig()) {
+          // Use a fixed time step for consistent physics
+          for (let i = 0; i < subSteps; i++) {
+            world.step(1/60 / subSteps); // Fixed step of 1/60 with 10 substeps
+          }
+          
+          // Set proper rotation speeds - SLOWER ROTATION
+          const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2
+          const sizeRatio = 0.2 / coilerRadius;
+          const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+          
+          if (coilerBody) {
+            coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+          }
+          if (coilerBodySide1) {
+            coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+          }
+          if (coilerBodySide2) {
+            coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+          }
+          
+          // Check for segment limit
+          if (ropeBodies.length > maxSegments - 1) {
+            isPlaying = false;
+            ropeFinalized = true;
+            coilerBody.angularVelocity.set(0, 0, 0);
+            if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
+            if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
+            
+            // Make all rope bodies static instead of removing them
+            for (let i = 0; i < ropeBodies.length; i++) {
+              const body = ropeBodies[i];
+              body.type = BODY_TYPES.STATIC;
+              body.mass = 0;
+              body.updateMassProperties();
+              body.velocity.set(0, 0, 0);
+              body.angularVelocity.set(0, 0, 0);
+              body.force.set(0, 0, 0);
+              body.torque.set(0, 0, 0);
+            }
+            
+            // Save the current rope shape
+            updateRopeCurve();
+            
+            // Clean up existing timer
+            if (segmentTimer) {
+              clearInterval(segmentTimer);
+              segmentTimer = null;
+            }
+          }
+          
+          // Handle segment accumulation with delta time
+          segmentAccumulator += deltaTime;
+          if (segmentAccumulator >= segmentAddInterval && ropeBodies.length < maxSegments) {
+            addRopeSegment();
+            segmentAccumulator = 0;
+          }
+          
+          // Handle anchor position updates independently of physics steps
+          if (dummy) {
+            dummy.getWorldPosition(temp);
+            anchorEnd.position.x = temp.x;
+            anchorEnd.position.y = temp.y;
+            anchorEnd.position.z = temp.z;
+            anchorEnd.velocity.set(0, 0, 0);
+            anchorEnd.angularVelocity.set(0, 0, 0);
+            const lastSegmentCount = 10;
+            for (let i = Math.max(0, ropeBodies.length - lastSegmentCount); i < ropeBodies.length; i++) {
+              ropeBodies[i].velocity.scale(0.9);
+              ropeBodies[i].angularVelocity.scale(0.9);
+            }
+          }
+          
+          // Always update the rope geometry if we have bodies
+          if (ropeBodies.length > 0) {
+            if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+              updateRopeGeometry();
+            } else {
+              createRopeMesh();
+            }
+          }
         }
       }
     }
