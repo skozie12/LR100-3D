@@ -61,8 +61,8 @@ const STATIC_SEGMENT_INTERVAL = 1; // Changed from 4 to 1 - make EVERY segment s
 
 // Simplify and make more aggressive
 const ROTATION_BEFORE_STATIC = Math.PI / 4; // Reduced from π/2 to π/4 for faster conversion
-const ATTRACTION_STRENGTH = 30.0; // Stronger pull force
-const CONTACT_DISTANCE_THRESHOLD = 0.06; // Adjusted threshold
+const ATTRACTION_STRENGTH = 40.0; // Increased from 30.0 for stronger attraction
+const CONTACT_DISTANCE_THRESHOLD = 0.04; // Reduced from 0.06 for more precise detection
 const IMMEDIATE_STATIC_CONVERSION = true; // New flag to enable immediate static conversion
 const CONTACT_FRAMES_BEFORE_STATIC = 60; // Shorter waiting period
 
@@ -370,7 +370,7 @@ function applyRopeForces(rotationSpeed) {
   }
 }
 
-// Simple function to find segment positions near coiler and make static
+// Update processCoilerContacts for stronger attraction to coiler
 function processCoilerContacts() {
   if (!coilerBody || isRopeFinalized) return;
 
@@ -411,16 +411,16 @@ function processCoilerContacts() {
         console.log(`Segment ${i} near coiler, dist: ${distToSurface.toFixed(4)}`);
       }
 
-      // Add stronger attraction to coiler surface while maintaining current position
+      // Apply stronger attraction force directly to coiler surface (no offset)
       const nx = dx / dist;
       const ny = dy / dist;
-      const targetDist = coilerRadius + 0.01;
+      const targetDist = coilerRadius; // Remove the +0.01 offset
       const distError = dist - targetDist;
 
       // Apply stronger forces for segments close to the threshold
-      let attractionMultiplier = 1.0;
+      let attractionMultiplier = 2.0; // Increased base multiplier
       if (distToSurface > CONTACT_DISTANCE_THRESHOLD * 0.5) {
-        attractionMultiplier = 2.0; // Stronger pull when not quite close enough
+        attractionMultiplier = 4.0; // Much stronger pull when not quite close enough
       }
 
       // Apply attraction force
@@ -443,15 +443,15 @@ function processCoilerContacts() {
       body.velocity.scale(0.8);
       body.angularVelocity.scale(0.8);
 
-      // Make static immediately after getting close enough to coiler
-      if (distToSurface < CONTACT_DISTANCE_THRESHOLD * 0.5) {
+      // Make static when very close to the surface
+      if (distToSurface < CONTACT_DISTANCE_THRESHOLD * 0.25) {
         makeSegmentStatic(i);
       }
     }
   }
 }
 
-// Simple makeSegmentStatic function - position exactly on coiler surface
+// Modified makeSegmentStatic to position segments exactly on the coiler surface
 function makeSegmentStatic(index) {
   const body = ropeBodies[index];
   if (!body || body.type === BODY_TYPES.STATIC) return false;
@@ -460,25 +460,18 @@ function makeSegmentStatic(index) {
     // Calculate position relative to coiler center
     const dx = body.position.x - coilerBody.position.x;
     const dy = body.position.y - coilerBody.position.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx);
 
     // Get coiler radius from config
     const config = COILER_CONFIG?.[activeCoilerType];
     const coilerRadius = config?.radius || 0.18;
 
-    // Only adjust position if the segment is too far from the coiler surface
-    const distFromSurface = Math.abs(dist - coilerRadius);
-    if (distFromSurface > 0.03) {
-      // Make small adjustment toward coiler surface (not full snapping)
-      const targetDist = coilerRadius + 0.01;
-      const newDist = dist * 0.2 + targetDist * 0.8; // Blend for smoother transition
+    // ALWAYS position exactly on coiler surface - no exceptions
+    // This ensures rope wraps tight around the coiler with no air gap
+    body.position.x = coilerBody.position.x + coilerRadius * Math.cos(angle);
+    body.position.y = coilerBody.position.y + coilerRadius * Math.sin(angle);
 
-      body.position.x = coilerBody.position.x + newDist * Math.cos(angle);
-      body.position.y = coilerBody.position.y + newDist * Math.sin(angle);
-    }
-
-    // Make static without additional position change
+    // Make static
     body.type = BODY_TYPES.STATIC;
     body.mass = 0;
     body.updateMassProperties();
@@ -487,11 +480,11 @@ function makeSegmentStatic(index) {
     body.force.set(0, 0, 0);
     body.torque.set(0, 0, 0);
 
-    // Store actual distance and angle for rotation with coiler
+    // Store coilerRadius (not actual distance) to ensure consistent rotation 
     body.userData = {
       coilerAttachment: {
         angle: angle,
-        radius: dist, // Use actual distance, not coiler radius
+        radius: coilerRadius, // Use exact coiler radius, not measured distance
         z: body.position.z - coilerBody.position.z
       }
     };
@@ -500,7 +493,7 @@ function makeSegmentStatic(index) {
     staticSegments.add(index);
 
     if (debugStaticConversions) {
-      console.log(`Segment ${index} static at (${body.position.x.toFixed(3)}, ${body.position.y.toFixed(3)}), distance: ${dist.toFixed(3)}`);
+      console.log(`Segment ${index} static at (${body.position.x.toFixed(3)}, ${body.position.y.toFixed(3)}), exactly on coiler surface`);
     }
 
     return true;
@@ -524,7 +517,7 @@ function rotateStaticSegments(angleIncrement) {
     // Update angle
     attachment.angle += angleIncrement;
 
-    // Update position based on angle - uses actual radius from attachment
+    // Position on coiler with exact stored radius (which should be coilerRadius)
     body.position.x = coilerBody.position.x + attachment.radius * Math.cos(attachment.angle);
     body.position.y = coilerBody.position.y + attachment.radius * Math.sin(attachment.angle);
     body.position.z = coilerBody.position.z + attachment.z;
