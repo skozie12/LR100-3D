@@ -35,6 +35,9 @@ let lastSegmentAngle = 0;
 // Track which segments have been made static
 let staticSegments = new Set();
 
+// Fix initialization variables to ensure segments aren't static initially
+const INITIAL_STATIC_SEGMENTS = new Set(); // Empty set initially - only end anchor should be static
+
 // Add these variables to the top of the file with other state variables
 let frameCounter = 0; // Added to fix reference error
 
@@ -103,24 +106,23 @@ function initPhysics() {
   });
   world.defaultMaterial = defaultMaterial;
 
-  // Create anchor points
+  // Create anchor points with correct static/kinematic states
   anchorEnd = new Body({ mass: 0 });
   anchorEnd.position.set(0.57, 0.225, 0.025);
-  anchorEnd.type = BODY_TYPES.KINEMATIC;
+  anchorEnd.type = BODY_TYPES.KINEMATIC; // End anchor is movable but has infinite mass
   world.addBody(anchorEnd);
 
   anchorStart = new Body({ mass: 0 });
   anchorStart.position.set(-0.6, 0.27, -0.058);
+  anchorStart.type = BODY_TYPES.STATIC; // Start anchor is completely static
   world.addBody(anchorStart);
 
   anchor = new Body({ mass: 0 });
   anchor.position.set(0, 0.3, 0.03);
+  anchor.type = BODY_TYPES.STATIC; // Middle anchor is completely static
   world.addBody(anchor);
 
-  // Reset segment wrap tracking
-  segmentWrapTimes = [];
-
-  // Reset tracking for static segments
+  // Reset static segments tracking - should be empty initially
   staticSegments = new Set();
 }
 
@@ -148,13 +150,16 @@ function createRopeSegments() {
     }
 
     const segmentBody = new Body({
-      mass: segmentMass, // Using the reduced mass value
+      mass: segmentMass, // Ensure this is > 0 to be dynamic
       shape: sphereShape,
       position: new Vec3(x, y, z),
       material: defaultMaterial,
       collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
       collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
     });
+
+    // Explicitly set to DYNAMIC type to ensure it's not static
+    segmentBody.type = BODY_TYPES.DYNAMIC;
 
     // Adjust damping for better friction
     segmentBody.angularDamping = 0.97; // Increased damping
@@ -380,10 +385,15 @@ function processCoilerContacts() {
     console.log(`Current static segments: ${staticSegments.size}/${ropeBodies.length}`);
   }
 
-  // Simple approach: check every non-static rope segment for proximity to coiler
+  // Only check segments that aren't already static
   for (let i = 0; i < ropeBodies.length; i++) {
     const body = ropeBodies[i];
-    if (!body || body.type === BODY_TYPES.STATIC) continue;
+
+    // Skip if:
+    // 1. Body doesn't exist
+    // 2. Body is already static
+    // 3. It's one of the anchor points (indices 0, midRope)
+    if (!body || body.type === BODY_TYPES.STATIC || i === 0 || i === midRope) continue;
 
     // Calculate distance to coiler surface
     const dx = body.position.x - coilerPos.x;
@@ -396,7 +406,7 @@ function processCoilerContacts() {
       // Track this segment's position
       if (!staticTrackingArray[i]) {
         staticTrackingArray[i] = { pos: { x: body.position.x, y: body.position.y, z: body.position.z } };
-        
+
         // Log when we first detect a segment near the coiler
         console.log(`Segment ${i} near coiler, dist: ${distToSurface.toFixed(4)}`);
       }
@@ -452,22 +462,22 @@ function makeSegmentStatic(index) {
     const dy = body.position.y - coilerBody.position.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx);
-    
+
     // Get coiler radius from config
     const config = COILER_CONFIG?.[activeCoilerType];
     const coilerRadius = config?.radius || 0.18;
-    
+
     // Only adjust position if the segment is too far from the coiler surface
     const distFromSurface = Math.abs(dist - coilerRadius);
     if (distFromSurface > 0.03) {
       // Make small adjustment toward coiler surface (not full snapping)
       const targetDist = coilerRadius + 0.01;
       const newDist = dist * 0.2 + targetDist * 0.8; // Blend for smoother transition
-      
+
       body.position.x = coilerBody.position.x + newDist * Math.cos(angle);
       body.position.y = coilerBody.position.y + newDist * Math.sin(angle);
     }
-    
+
     // Make static without additional position change
     body.type = BODY_TYPES.STATIC;
     body.mass = 0;
@@ -476,7 +486,7 @@ function makeSegmentStatic(index) {
     body.angularVelocity.set(0, 0, 0);
     body.force.set(0, 0, 0);
     body.torque.set(0, 0, 0);
-    
+
     // Store actual distance and angle for rotation with coiler
     body.userData = {
       coilerAttachment: {
@@ -485,14 +495,14 @@ function makeSegmentStatic(index) {
         z: body.position.z - coilerBody.position.z
       }
     };
-    
+
     // Track static segments
     staticSegments.add(index);
-    
+
     if (debugStaticConversions) {
       console.log(`Segment ${index} static at (${body.position.x.toFixed(3)}, ${body.position.y.toFixed(3)}), distance: ${dist.toFixed(3)}`);
     }
-    
+
     return true;
   } catch (err) {
     console.error(`Error making segment ${index} static:`, err);
@@ -537,13 +547,16 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
 
     // Create new segment with improved physics properties
     const newSegment = new Body({
-      mass: 0.25, // Reduced to make it follow forces better
+      mass: 0.25, // Make sure mass > 0 so it's not static
       shape: new Sphere(segmentWidth / 2),
       position: new Vec3(baseSegment.position.x, baseSegment.position.y, baseSegment.position.z),
       material: defaultMaterial,
       collisionFilterGroup: COLLISION_GROUPS.ROPE | COLLISION_GROUPS.ROPE_SEGMENT,
       collisionFilterMask: COLLISION_GROUPS.COILER | COLLISION_GROUPS.ROPE_SEGMENT
     });
+
+    // Explicitly set to DYNAMIC type
+    newSegment.type = BODY_TYPES.DYNAMIC;
 
     // Assign creation index to track which segments are 4th
     const creationIndex = addedSegments;
