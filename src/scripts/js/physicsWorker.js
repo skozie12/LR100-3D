@@ -11,14 +11,14 @@ const COLLISION_GROUPS = {
 };
 
 // Rope related variables
-let segmentCount = 40;
+let segmentCount = 35; // Reduced from 40 to 35 (5 segments shorter)
 let segmentWidth = 0.012;
 let segmentMass = 0.25; // Reduced from 0.5 to 0.25 (half the weight)
 let segmentDistance = 0.012;
 let ropeBodies = [];
 let anchorEnd, anchorStart, anchor;
 let coilerBody, coilerBodySide1, coilerBodySide2;
-let midRope = 10;
+let midRope = 8; // Adjusted from 10 to 8 (scaled down for shorter rope)
 
 // Add these variables to replace window references
 let addedSegments = 0;
@@ -50,10 +50,11 @@ const FIXED_TIMESTEP = 1 / 60; // Run at consistent 60Hz physics regardless of f
 const FIXED_SUBSTEPS = 4; // Always use 4 substeps for consistent behavior
 
 // Replace the fixed SEGMENT_ANGLE_INCREMENT with a map for each coiler type
+// Slowed down by 5% by increasing the divisor
 const SEGMENT_ANGLE_INCREMENT_MAP = {
-  "100-10": Math.PI / 18, // Increased from π/12 to π/18 (1.5x faster)
-  "100-99": Math.PI / 14.76, // Increased from π/9.84 to π/14.76 (1.5x faster)
-  "100-200": Math.PI / 10.005 // Increased from π/6.67 to π/10.005 (1.5x faster)
+  "100-10": Math.PI / 18.9, // 5% slower (increased from π/18)
+  "100-99": Math.PI / 15.498, // 5% slower (increased from π/14.76)
+  "100-200": Math.PI / 10.505 // 5% slower (increased from π/10.005)
 };
 
 // Change the STATIC_SEGMENT_INTERVAL to 1 (make every segment static)
@@ -88,6 +89,9 @@ let maxConstraintForce = 5e2; // Reduced from 1e3 to allow more stretch
 let constraintStiffness = 3e4; // Lowered stiffness for more elasticity
 const ROPE_STRETCH_FACTOR = 0.85; // New factor to allow more stretch (lower = more stretch)
 
+// Add a new constant to control initial positioning
+const INITIAL_ROPE_TOP_OFFSET = 0.05; // Distance above coiler for the end anchor
+
 // Restore normal gravity
 function initPhysics() {
   world = new World({
@@ -107,8 +111,9 @@ function initPhysics() {
   world.defaultMaterial = defaultMaterial;
 
   // Create anchor points with correct static/kinematic states
+  // Note: We'll reposition anchorEnd after creating the coiler
   anchorEnd = new Body({ mass: 0 });
-  anchorEnd.position.set(0.57, 0.225, 0.025);
+  anchorEnd.position.set(0.57, 0.225 + 0.2, 0.025); // Position higher initially
   anchorEnd.type = BODY_TYPES.KINEMATIC; // End anchor is movable but has infinite mass
   world.addBody(anchorEnd);
 
@@ -126,9 +131,28 @@ function initPhysics() {
   staticSegments = new Set();
 }
 
+// Add function to position end anchor at top of coiler
+function positionEndAnchorAtCoilerTop() {
+  if (!coilerBody || !anchorEnd) return;
+
+  const config = COILER_CONFIG?.[activeCoilerType];
+  if (!config) return;
+
+  // Position end anchor at top of the coiler
+  const coilerRadius = config.radius;
+  anchorEnd.position.x = coilerBody.position.x;
+  anchorEnd.position.y = coilerBody.position.y + coilerRadius + INITIAL_ROPE_TOP_OFFSET;
+  anchorEnd.position.z = coilerBody.position.z;
+
+  console.log(`Positioned end anchor at top of coiler: (${anchorEnd.position.x.toFixed(3)}, ${anchorEnd.position.y.toFixed(3)}, ${anchorEnd.position.z.toFixed(3)})`);
+}
+
 // Create rope segments with physics - update for reduced mass
 function createRopeSegments() {
   resetRope();
+
+  // Make sure end anchor is at top of coiler
+  positionEndAnchorAtCoilerTop();
 
   for (let i = 0; i < segmentCount; i++) {
     const sphereShape = new Sphere(segmentWidth / 2);
@@ -143,10 +167,15 @@ function createRopeSegments() {
       y += Math.sin(segT * Math.PI) * 0.05;
     } else {
       const segT = (i - midRope) / (segmentCount - midRope - 1);
+
+      // Create smoother path to coiler top with a higher arc
       x = anchor.position.x + segT * (anchorEnd.position.x - anchor.position.x);
-      y = anchor.position.y + segT * (anchorEnd.position.y - anchor.position.y);
-      z = anchor.position.z + segT * (anchorEnd.position.z - anchorEnd.position.z);
-      y += Math.sin(segT * Math.PI) * 0.05;
+
+      // Add higher arc for segments approaching the coiler
+      const heightBoost = Math.sin(segT * Math.PI) * 0.15; // Increased arc height
+      y = anchor.position.y + segT * (anchorEnd.position.y - anchor.position.y) + heightBoost;
+
+      z = anchor.position.z + segT * (anchorEnd.position.z - anchor.position.z);
     }
 
     const segmentBody = new Body({
@@ -355,8 +384,8 @@ function applyRopeForces(rotationSpeed) {
       new Vec3(0, 0, 0)
     );
 
-    // Strong tangential force to match coiler rotation
-    const tangentialForce = Math.abs(rotationSpeed) * 12.0; // Stronger
+    // Strong tangential force to match coiler rotation - slowed by 5%
+    const tangentialForce = Math.abs(rotationSpeed) * 11.4; // Reduced from 12.0 by 5%
     body.applyForce(
       new Vec3(tx * tangentialForce * rotationDirection, ty * tangentialForce * rotationDirection, 0),
       new Vec3(0, 0, 0)
@@ -373,6 +402,9 @@ function applyRopeForces(rotationSpeed) {
 // Update processCoilerContacts for stronger attraction to coiler
 function processCoilerContacts() {
   if (!coilerBody || isRopeFinalized) return;
+
+  // Don't allow segments to stick during the first few frames
+  if (frameCounter < 5) return;
 
   const config = COILER_CONFIG?.[activeCoilerType];
   if (!config) return;
@@ -431,7 +463,7 @@ function processCoilerContacts() {
       const rotationSpeed = coilerBody.angularVelocity.z;
       const tx = -ny;
       const ty = nx;
-      const tangentialForce = Math.abs(rotationSpeed) * 15.0; // Strong tangential force
+      const tangentialForce = Math.abs(rotationSpeed) * 14.25; // Reduced from 15.0 by 5%
       const rotationDirection = Math.sign(rotationSpeed);
 
       body.applyForce(
@@ -503,9 +535,12 @@ function makeSegmentStatic(index) {
   }
 }
 
-// Rotate static segments with coiler
+// Reduce rotation amount by 5% by adjusting the rotateStaticSegments function
 function rotateStaticSegments(angleIncrement) {
   if (!coilerBody || angleIncrement === 0) return;
+
+  // Slow down the rotation by 5%
+  const adjustedIncrement = angleIncrement * 0.95;
 
   // Update all static segments attached to coiler
   for (let i = 0; i < ropeBodies.length; i++) {
@@ -514,8 +549,8 @@ function rotateStaticSegments(angleIncrement) {
 
     const attachment = body.userData.coilerAttachment;
 
-    // Update angle
-    attachment.angle += angleIncrement;
+    // Update angle - use the adjusted (slower) increment
+    attachment.angle += adjustedIncrement;
 
     // Position on coiler with exact stored radius (which should be coilerRadius)
     body.position.x = coilerBody.position.x + attachment.radius * Math.cos(attachment.angle);
@@ -804,6 +839,9 @@ function createCoiler(config, coilerType) {
   coilerBody.position.set(0.57, 0.225, coilerConfig.zOffset);
   world.addBody(coilerBody);
 
+  // Reposition the end anchor after creating coiler
+  positionEndAnchorAtCoilerTop();
+
   return coilerBody;
 }
 
@@ -919,6 +957,9 @@ self.onmessage = function (e) {
         // Create physics objects
         createCoiler(data.coilerConfig, data.activeCoilerType);
         createCoilerSides(data.coilerConfig, data.activeCoilerType);
+
+        // After coiler is created, position end anchor at top
+        positionEndAnchorAtCoilerTop();
 
         self.postMessage({
           type: 'coilerCreated'
