@@ -28,33 +28,12 @@ let currentZ = 0;
 // Add at the top with other state variables
 let isRopeFinalized = false;
 
-// Add this flag at the top with other state variables
-let isAnimationStarted = false;
-
 // Add a variable to track the current max segments based on coiler type
 let currentMaxSegments = 400; // Default, will be updated with messages
-
-// Add accumulator variables for fixed timestep
-const fixedTimeStep = 1 / 60; // Physics at 60Hz for better precision
-let accumulator = 0;
-let physicsTime = 0;
-
-// Add rotation tracking variables
-let coilerAngle = 0;
-let segmentsPerRotation = 8; // Reduced from 12 to 8 for fewer segments per rotation
-let segmentAngleInterval = (Math.PI * 2) / segmentsPerRotation;
 let lastSegmentAngle = 0;
-
-// Fix detection constants for more precise contact
-const COILER_WRAP_DISTANCE = 0.03; // Smaller - only detect real contacts
-const WRAP_ROTATION_THRESHOLD = 0; // Convert immediately on contact
-const STATIC_SEGMENTS_FOLLOW_COILER = true;
 
 // Track which segments have been made static
 let staticSegments = new Set();
-
-// Add tracking for segments near coiler
-let segmentWrapTimes = []; // Tracks how long each segment has been near coiler
 
 // Add these variables to the top of the file with other state variables
 let frameCounter = 0; // Added to fix reference error
@@ -62,12 +41,6 @@ let frameCounter = 0; // Added to fix reference error
 // Add reference to coiler config to ensure correct coiler radius is used
 let COILER_CONFIG = null;
 let activeCoilerType = "100-10"; // Default value
-
-// Add a fallback mechanism for static conversion
-const MAX_SEGMENT_AGE = 120; // Force static after this many frames near coiler
-
-// Simplified constants
-const COILER_CONTACT_MARGIN = 0.05;
 
 // Refined constants for consistent physics simulation
 const FIXED_TIMESTEP = 1 / 60; // Run at consistent 60Hz physics regardless of framerate
@@ -80,23 +53,28 @@ const SEGMENT_ANGLE_INCREMENT_MAP = {
   "100-200": Math.PI / 10.005 // Increased from π/6.67 to π/10.005 (1.5x faster)
 };
 
-// Fix the STATIC_SEGMENT_INTERVAL value - change back to 4 from 1
-const STATIC_SEGMENT_INTERVAL = 4; // Only make every 4th segment static
+// Change the STATIC_SEGMENT_INTERVAL to 1 (make every segment static)
+const STATIC_SEGMENT_INTERVAL = 1; // Changed from 4 to 1 - make EVERY segment static
 
-// Track simulation state
-let simulationTime = 0; // Total elapsed physics time
-let totalRotationAngle = 0; // Total coiler rotation angle
+// Simplify and make more aggressive
+const ROTATION_BEFORE_STATIC = Math.PI / 4; // Reduced from π/2 to π/4 for faster conversion
+const ATTRACTION_STRENGTH = 12.0; // Increased from 5.0 to 12.0 for stronger coiler contact
+const CONTACT_DISTANCE_THRESHOLD = 0.08; // Increased from 0.05 for more aggressive contact detection
+const IMMEDIATE_STATIC_CONVERSION = true; // New flag to enable immediate static conversion
 
-// Track simulation state
-let segmentContactTracking = new Map(); // Map segment index to contact data
+// Add a debug flag to track static conversions
+let debugStaticConversions = true;
 
-// Improve contact handling constants
-const ROTATION_BEFORE_STATIC = Math.PI / 3; // Increased from π/4 to π/3 for smoother curves
 const CONTACT_DAMPING = 0.85; // Stronger damping for segments in contact with coiler
-const ATTRACTION_STRENGTH = 5.0; // Reduced from 8.0 to 5.0
 
 // Add this tracking variable at the top with other state variables
 let creationIndices = new Map(); // Maps segment body to its creation index
+
+// Make sure simulationTime and totalRotationAngle are properly declared at the top with other state variables
+let simulationTime = 0;      // Total elapsed physics time
+let totalRotationAngle = 0;  // Total coiler rotation angle - ensure it's defined
+let segmentContactTracking = new Map(); // Map segment index to contact data - ensure it's defined
+let segmentWrapTimes = [];   // Tracks how long each segment has been near coiler - ensure it's defined
 
 // Restore normal gravity
 function initPhysics() {
@@ -209,8 +187,16 @@ function resetRope(resetAngle = false) {
     // Reset frame counter when rope is reset
     frameCounter = 0;
 
+    // Reset time tracking variables
+    simulationTime = 0; // Reset simulation time explicitly
+    totalRotationAngle = 0; // Reset total rotation angle explicitly
+
     // Clear segment contact tracking
-    segmentContactTracking.clear();
+    if (segmentContactTracking) {
+      segmentContactTracking.clear();
+    } else {
+      segmentContactTracking = new Map(); // Initialize if it doesn't exist
+    }
 
     // Clear creation indices tracking
     creationIndices.clear();
@@ -266,6 +252,12 @@ function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, currentRota
 
   // Update total rotation angle based on rotation speed
   const angleIncrement = rotationSpeed * fixedStep;
+
+  // Make sure totalRotationAngle is initialized before adding to it
+  if (totalRotationAngle === undefined) {
+    totalRotationAngle = 0;
+  }
+
   totalRotationAngle += angleIncrement;
 
   // Step the physics world with fixed parameters
@@ -389,7 +381,63 @@ function applyRopeForces(rotationSpeed) {
   }
 }
 
-// Enhanced contact tracking and processing
+// Completely rewrite makeSegmentStatic to create a more precise attachment to the coiler
+function makeSegmentStatic(index) {
+  const body = ropeBodies[index];
+  if (!body) return false;
+  if (body.type === BODY_TYPES.STATIC) return false;
+
+  try {
+    // Get current position relative to coiler
+    const dx = body.position.x - coilerBody.position.x;
+    const dy = body.position.y - coilerBody.position.y;
+    const angle = Math.atan2(dy, dx);
+
+    // Calculate distance from coiler center
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Slightly adjust position to be exactly at the coiler radius
+    // This looks better visually while still being "instant"
+    const config = COILER_CONFIG?.[activeCoilerType];
+    const coilerRadius = config?.radius || 0.18;
+
+    body.position.x = coilerBody.position.x + coilerRadius * Math.cos(angle);
+    body.position.y = coilerBody.position.y + coilerRadius * Math.sin(angle);
+
+    // Make static
+    body.type = BODY_TYPES.STATIC;
+    body.mass = 0;
+    body.updateMassProperties();
+    body.velocity.set(0, 0, 0);
+    body.angularVelocity.set(0, 0, 0);
+    body.force.set(0, 0, 0);
+    body.torque.set(0, 0, 0);
+
+    // Store attachment info for rotating with coiler
+    body.userData = {
+      coilerAttachment: {
+        angle: angle,
+        radius: coilerRadius, // Use coiler radius for consistent rotation
+        z: body.position.z - coilerBody.position.z
+      }
+    };
+
+    // Track static segments
+    staticSegments.add(index);
+
+    // Log conversion
+    if (debugStaticConversions) {
+      console.log(`Segment ${index} now STATIC. Static count: ${staticSegments.size}/${ropeBodies.length}`);
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`Error making segment ${index} static:`, err);
+    return false;
+  }
+}
+
+// Completely rewrite processCoilerContacts to make segments static immediately on contact
 function processCoilerContacts() {
   if (!coilerBody || isRopeFinalized) return;
 
@@ -398,96 +446,16 @@ function processCoilerContacts() {
 
   const coilerRadius = config.radius;
   const coilerPos = coilerBody.position;
-  const rotationSpeed = coilerBody.angularVelocity.z;
 
-  // First, update all segments that are already being tracked
-  for (const [index, contactData] of segmentContactTracking.entries()) {
-    const body = ropeBodies[index];
-
-    // Remove tracking if segment no longer exists or is already static
-    if (!body || body.type === BODY_TYPES.STATIC) {
-      segmentContactTracking.delete(index);
-      continue;
-    }
-
-    // Update accumulated rotation
-    contactData.accumulatedRotation += Math.abs(rotationSpeed * FIXED_TIMESTEP);
-
-    // Get this segment's creation index
-    const creationIndex = body.userData?.creationIndex ?? creationIndices.get(body.id);
-
-    // Log the accumulated rotation to track progress
-    if (frameCounter % 60 === 0 && creationIndex % STATIC_SEGMENT_INTERVAL === 0) {
-      console.log(`Segment ${index} (creation ${creationIndex}) rotation: ${contactData.accumulatedRotation.toFixed(3)}/${ROTATION_BEFORE_STATIC}`);
-    }
-
-    // Check if segment should now be made static
-    if (contactData.accumulatedRotation >= ROTATION_BEFORE_STATIC && creationIndex !== undefined && creationIndex % STATIC_SEGMENT_INTERVAL === 0) {
-      // As we approach static conversion, gradually position the segment more precisely
-      const progress = Math.min(1.0, contactData.accumulatedRotation / ROTATION_BEFORE_STATIC);
-      if (progress > 0.8) {
-        // In the last 20% of transition, align precisely with coiler surface
-        const dx = body.position.x - coilerPos.x;
-        const dy = body.position.y - coilerPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-
-        // Blend current position with ideal position
-        const blendFactor = (progress - 0.8) * 5; // Map 0.8-1.0 to 0-1
-        const idealX = coilerPos.x + coilerRadius * Math.cos(angle);
-        const idealY = coilerPos.y + coilerRadius * Math.sin(angle);
-
-        body.position.x = body.position.x * (1 - blendFactor) + idealX * blendFactor;
-        body.position.y = body.position.y * (1 - blendFactor) + idealY * blendFactor;
-
-        // Apply increased damping to stabilize
-        body.velocity.scale(0.7);
-        body.angularVelocity.scale(0.7);
-      }
-
-      // If fully ready, make it static
-      if (progress >= 1.0) {
-        const success = makeSegmentStatic(index);
-        console.log(`Attempt to make segment ${index} static: ${success}`);
-        segmentContactTracking.delete(index);
-      }
-    } else {
-      // For non-static segments, keep them following the coiler well
-      const dx = body.position.x - coilerPos.x;
-      const dy = body.position.y - coilerPos.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      // Keep segment close to coiler surface
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const targetDist = coilerRadius + 0.01;
-      const distError = dist - targetDist;
-      const forceValue = distError * ATTRACTION_STRENGTH;
-
-      body.applyForce(new Vec3(nx * forceValue, ny * forceValue, 0), new Vec3(0, 0, 0));
-
-      // Apply tangential force in direction of rotation
-      const tx = -ny;
-      const ty = nx;
-      const tangentialForce = Math.abs(rotationSpeed) * 4.0;
-      const rotationDirection = Math.sign(rotationSpeed);
-
-      body.applyForce(
-        new Vec3(tx * tangentialForce * rotationDirection, ty * tangentialForce * rotationDirection, 0),
-        new Vec3(0, 0, 0)
-      );
-
-      // Progressive damping
-      const increasedDamping = 0.975; // Higher damping coefficient for more friction
-      body.velocity.scale(increasedDamping);
-      body.angularVelocity.scale(increasedDamping);
-    }
+  // Log static segment count periodically
+  if (debugStaticConversions && frameCounter % 60 === 0) {
+    console.log(`Current static segments: ${staticSegments.size}/${ropeBodies.length}`);
   }
 
-  // Now check for new segments that came into contact with the coiler
+  // Check all non-static segments for contact with coiler
   for (let i = ropeBodies.length - 1; i >= 0; i--) {
     const body = ropeBodies[i];
-    if (!body || body.type === BODY_TYPES.STATIC || segmentContactTracking.has(i)) continue;
+    if (!body || body.type === BODY_TYPES.STATIC) continue;
 
     // Distance to coiler center
     const dx = body.position.x - coilerPos.x;
@@ -496,35 +464,36 @@ function processCoilerContacts() {
 
     // Check if close to coiler surface
     const distError = Math.abs(dist - coilerRadius);
-    if (distError < 0.04) { // Slightly increased threshold for better detection
-      // Start tracking this segment with 0 accumulated rotation
-      segmentContactTracking.set(i, {
-        contactStartTime: simulationTime,
-        accumulatedRotation: 0
-      });
 
-      // Apply initial damping to help it follow the coiler better
-      body.velocity.scale(0.8);
+    if (distError < CONTACT_DISTANCE_THRESHOLD) {
+      // Make segment static IMMEDIATELY on contact
+      const success = makeSegmentStatic(i);
 
-      // Also check if we have neighboring segments to this one
-      // This helps create smoother groups of segments following the coiler
-      for (let j = Math.max(0, i - 3); j < Math.min(ropeBodies.length, i + 4); j++) {
-        if (j !== i && !segmentContactTracking.has(j) && ropeBodies[j]?.type !== BODY_TYPES.STATIC) {
-          // Calculate distance from this segment to coiler
-          const jdx = ropeBodies[j].position.x - coilerPos.x;
-          const jdy = ropeBodies[j].position.y - coilerPos.y;
-          const jdist = Math.sqrt(jdx * jdx + jdy * jdy);
-          const jdistError = Math.abs(jdist - coilerRadius);
-
-          // If nearby segment is also close to coiler, start tracking it too
-          if (jdistError < 0.08) {
-            segmentContactTracking.set(j, {
-              contactStartTime: simulationTime,
-              accumulatedRotation: 0
-            });
-          }
-        }
+      if (success && debugStaticConversions) {
+        console.log(`Segment ${i} made STATIC immediately on contact with coiler`);
       }
+
+      // Skip to next segment since this one is now static
+      continue;
+    }
+
+    // For segments that aren't in contact yet, help them reach the coiler
+    // Apply attraction forces to help segments find the coiler
+    if (dist < coilerRadius * 3) {
+      // Normalized direction toward coiler
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      // Apply force to attract segment to coiler
+      const targetDist = coilerRadius + 0.01;
+      const distError = dist - targetDist;
+      const forceValue = distError * ATTRACTION_STRENGTH * 1.2;
+
+      body.applyForce(new Vec3(nx * forceValue, ny * forceValue, 0), new Vec3(0, 0, 0));
+
+      // Apply some damping to stabilize approach
+      body.velocity.scale(0.95);
+      body.angularVelocity.scale(0.95);
     }
   }
 }
@@ -543,7 +512,7 @@ function rotateStaticSegments(angleIncrement) {
     // Update angle
     attachment.angle += angleIncrement;
 
-    // Update position based on angle
+    // Update position based on angle - uses actual radius from attachment
     body.position.x = coilerBody.position.x + attachment.radius * Math.cos(attachment.angle);
     body.position.y = coilerBody.position.y + attachment.radius * Math.sin(attachment.angle);
     body.position.z = coilerBody.position.z + attachment.z;
@@ -564,9 +533,9 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
 
     if (!baseSegment || !nextSegment) return false;
 
-    // Create new segment with reduced mass
+    // Create new segment with improved physics properties
     const newSegment = new Body({
-      mass: 0.35, // Slightly higher than before but still lighter than original
+      mass: 0.25, // Reduced to make it follow forces better
       shape: new Sphere(segmentWidth / 2),
       position: new Vec3(baseSegment.position.x, baseSegment.position.y, baseSegment.position.z),
       material: defaultMaterial,
@@ -581,28 +550,27 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
     // Store creation data in userData
     newSegment.userData = {
       creationAngle: currentAngle,
-      creationTime: simulationTime,
+      creationTime: simulationTime || 0,
       creationIndex: creationIndex
     };
 
-    // Increment global counter so we know total segments created
+    // Increment global counter
     addedSegments++;
 
-    // Add initial velocity toward coiler with appropriate force
+    // Add stronger initial velocity toward coiler
     if (coilerBody) {
       const dx = coilerBody.position.x - baseSegment.position.x;
       const dy = coilerBody.position.y - baseSegment.position.y;
-
-      // Adjust velocity based on distance to coiler
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const velocityScale = dist > 0.5 ? 0.6 : 0.4; // More gentle if closer
 
+      // Much stronger initial velocity to help segments reach the coiler quickly
+      const velocityScale = dist > 0.5 ? 1.2 : 0.8; // Increased from 0.8/0.6 
       newSegment.velocity.set(dx * velocityScale, dy * velocityScale, 0);
     }
 
-    // Adjust damping for better friction and dynamics
-    newSegment.linearDamping = 0.85; // Increased damping for better friction
-    newSegment.angularDamping = 0.85;
+    // Better damping for smoother movement
+    newSegment.linearDamping = 0.8; // Less damping to allow segments to reach coiler
+    newSegment.angularDamping = 0.8;
 
     world.addBody(newSegment);
 
@@ -664,21 +632,16 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
   }
 }
 
-// Fix the makeSegmentStatic function to properly check for staticness
-function makeSegmentStatic(index) {
-  const body = ropeBodies[index];
-  if (!body) return false;
+// More aggressive implementation of makeRopeBodiesStatic
+function makeRopeBodiesStatic() {
+  isRopeFinalized = true;
+  console.log("Finalizing rope - making ALL segments static");
 
-  // Check if body is already static
-  if (body.type === BODY_TYPES.STATIC) return false;
+  for (let i = 0; i < ropeBodies.length; i++) {
+    const body = ropeBodies[i];
+    if (!body) continue;
 
-  // Get the segment's creation index
-  const creationIndex = body.userData?.creationIndex ?? creationIndices.get(body.id);
-
-  // Fix this condition - only make static if it's a 4th segment (creationIndex % STATIC_SEGMENT_INTERVAL === 0)
-  if (creationIndex === undefined || creationIndex % STATIC_SEGMENT_INTERVAL !== 0) return false;
-
-  try {
+    // Force all segments to be static at their current positions
     body.type = BODY_TYPES.STATIC;
     body.mass = 0;
     body.updateMassProperties();
@@ -687,87 +650,30 @@ function makeSegmentStatic(index) {
     body.force.set(0, 0, 0);
     body.torque.set(0, 0, 0);
 
-    // Save the current position relative to the coiler for rotation tracking
-    const dx = body.position.x - coilerBody.position.x;
-    const dy = body.position.y - coilerBody.position.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx);
+    // If near coiler, calculate relationship using actual current position
+    if (coilerBody) {
+      const dx = body.position.x - coilerBody.position.x;
+      const dy = body.position.y - coilerBody.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Store attachment info for rotating with coiler
-    body.userData.coilerAttachment = {
-      angle: angle,
-      radius: dist,
-      z: body.position.z - coilerBody.position.z
-    };
+      if (dist < coilerBody.shapes[0].radius * 2.0) { // Increased range for attachment
+        // Use current actual position for attachment
+        const angle = Math.atan2(dy, dx);
+        body.userData = {
+          coilerAttachment: {
+            angle: angle,
+            radius: dist, // Use actual distance, not coiler radius
+            z: body.position.z - coilerBody.position.z
+          }
+        };
+      }
+    }
 
     // Track static segments
-    staticSegments.add(index);
-    console.log(`Made segment ${index} (creation index ${creationIndex}) static`);
-    return true;
-  } catch (err) {
-    console.error(`Error making segment ${index} static:`, err);
-    return false;
-  }
-}
-
-// Get validated positions for rendering
-function getValidPositions() {
-  return ropeBodies.map(body => {
-    if (!body || !body.position) return null;
-    return {
-      x: body.position.x,
-      y: body.position.y,
-      z: body.position.z
-    };
-  }).filter(pos => pos !== null);
-}
-
-// Update makeRopeBodiesStatic to respect creation indices
-function makeRopeBodiesStatic() {
-  isRopeFinalized = true;
-
-  // First set proper damping for all segments
-  for (let i = 0; i < ropeBodies.length; i++) {
-    const body = ropeBodies[i];
-    if (!body) continue;
-
-    // Get creation index
-    const creationIndex = body.userData?.creationIndex ?? creationIndices.get(body.id);
-
-    // Make non-4th segments highly damped but still dynamic
-    if (creationIndex === undefined || creationIndex % STATIC_SEGMENT_INTERVAL !== 0) {
-      body.linearDamping = 0.98;
-      body.angularDamping = 0.98;
-      body.velocity.scale(0.2);
-      body.angularVelocity.scale(0.2);
-
-      // Create gentle curves between static segments
-      if (creationIndex > 0 && ropeBodies[creationIndex - 1]) {
-        const staticBody = ropeBodies[Math.floor(creationIndex / STATIC_SEGMENT_INTERVAL) * STATIC_SEGMENT_INTERVAL];
-        if (staticBody && staticBody.userData?.coilerAttachment) {
-          const attachment = staticBody.userData.coilerAttachment;
-          const curveAmount = (Math.sin((creationIndex % STATIC_SEGMENT_INTERVAL / STATIC_SEGMENT_INTERVAL) * Math.PI) * 0.015);
-
-          body.position.x += body.position.x > coilerBody.position.x ? curveAmount : -curveAmount;
-          body.position.y += body.position.y > coilerBody.position.y ? curveAmount : -curveAmount;
-        }
-      }
-    } else {
-      // Make every 4th segment fully static
-      body.type = BODY_TYPES.STATIC;
-      body.mass = 0;
-      body.updateMassProperties();
-      body.velocity.set(0, 0, 0);
-      body.angularVelocity.set(0, 0, 0);
-      body.force.set(0, 0, 0);
-      body.torque.set(0, 0, 0);
-
-      // Track static segments
-      staticSegments.add(i);
-    }
+    staticSegments.add(i);
   }
 
-  // Make anchor points static
+  // Make anchor points static too
   if (anchorEnd) {
     anchorEnd.type = BODY_TYPES.STATIC;
     anchorEnd.updateMassProperties();
@@ -782,6 +688,8 @@ function makeRopeBodiesStatic() {
     anchor.type = BODY_TYPES.STATIC;
     anchor.updateMassProperties();
   }
+
+  console.log(`Finalized rope with ${staticSegments.size} static segments out of ${ropeBodies.length} total`);
 }
 
 // Update anchor position safely
@@ -951,6 +859,18 @@ function createCoilerSides(config, coilerType) {
   return { side1: coilerBodySide1, side2: coilerBodySide2 };
 }
 
+// Get validated positions for rendering
+function getValidPositions() {
+  return ropeBodies.map(body => {
+    if (!body || !body.position) return null;
+    return {
+      x: body.position.x,
+      y: body.position.y,
+      z: body.position.z
+    };
+  }).filter(pos => pos !== null);
+}
+
 // Completely redesigned message handler for better synchronization
 self.onmessage = function (e) {
   try {
@@ -968,7 +888,7 @@ self.onmessage = function (e) {
       case 'resetRope':
         // Reset time tracking
         simulationTime = 0;
-        totalRotationAngle = 0;
+        totalRotationAngle = 0; // Reset explicitly
         lastSegmentAngle = 0;
 
         // Reset physics objects
