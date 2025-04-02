@@ -92,6 +92,11 @@ const ROPE_STRETCH_FACTOR = 0.85; // New factor to allow more stretch (lower = m
 // Add a new constant to control initial positioning
 const INITIAL_ROPE_TOP_OFFSET = 0.05; // Distance above coiler for the end anchor
 
+// Add delay variables at the top with other state variables
+const STARTUP_DELAY_FRAMES = 60; // 1 second delay at 60fps
+let currentDelayFrames = 0;
+let delayActive = false;
+
 // Restore normal gravity
 function initPhysics() {
   world = new World({
@@ -279,6 +284,9 @@ function resetRope(resetAngle = false) {
 
     // Reset static tracking array
     staticTrackingArray = [];
+
+    // Reset the delay when resetting rope
+    setStartupDelay();
   } catch (err) {
     console.error("Error in resetRope:", err);
   }
@@ -296,8 +304,20 @@ function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, currentRota
   // Increment frame counter
   frameCounter++;
 
-  // Update total rotation angle based on rotation speed
-  const angleIncrement = rotationSpeed * fixedStep;
+  // Handle delay - if active, count down frames and use zero rotation speed
+  let effectiveRotationSpeed = rotationSpeed;
+  if (delayActive) {
+    currentDelayFrames--;
+    if (currentDelayFrames <= 0) {
+      delayActive = false;
+      console.log("Delay complete - starting coiler rotation");
+    } else {
+      effectiveRotationSpeed = 0; // No rotation during delay
+    }
+  }
+
+  // Update total rotation angle based on effective rotation speed
+  const angleIncrement = effectiveRotationSpeed * fixedStep;
 
   // Make sure totalRotationAngle is initialized before adding to it
   if (totalRotationAngle === undefined) {
@@ -312,7 +332,7 @@ function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, currentRota
   }
 
   // Call separate functions for coiler interactions
-  applyRopeForces(rotationSpeed);
+  applyRopeForces(effectiveRotationSpeed); // Use effective speed
   processCoilerContacts();
   rotateStaticSegments(angleIncrement);
 
@@ -330,14 +350,23 @@ function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, currentRota
     }
   }
 
-  // Return validated positions for rendering
+  // Add delay status to return value
   return {
     positions: getValidPositions(),
     segmentCount: ropeBodies.length,
     staticCount: staticSegments.size,
     simulationTime: simulationTime,
-    rotationAngle: totalRotationAngle
+    rotationAngle: totalRotationAngle,
+    delayActive: delayActive,
+    delayRemaining: currentDelayFrames
   };
+}
+
+// Add function to set/reset the delay
+function setStartupDelay(frames = STARTUP_DELAY_FRAMES) {
+  currentDelayFrames = frames;
+  delayActive = true;
+  console.log(`Setting startup delay: ${frames} frames`);
 }
 
 // Apply forces to rope segments based on physics properties
@@ -784,6 +813,7 @@ function createCoiler(config, coilerType) {
     totalRotationAngle = 0;
     lastSegmentAngle = 0;
     console.log(`Coiler type changed to ${activeCoilerType}, reset angle tracking`);
+    setStartupDelay();
   }
 
   // Get configuration for this coiler type
@@ -926,8 +956,11 @@ self.onmessage = function (e) {
     switch (type) {
       case 'init':
         initPhysics();
+        setStartupDelay(); // Set initial delay
         self.postMessage({
-          type: 'initialized'
+          type: 'initialized',
+          delayActive: delayActive,
+          delayRemaining: currentDelayFrames
         });
         break;
 
@@ -968,11 +1001,14 @@ self.onmessage = function (e) {
 
       case 'createRope':
         createRopeSegments();
+        setStartupDelay(); // Set delay when creating rope
         const initialPositions = getValidPositions();
 
         self.postMessage({
           type: 'ropeCreated',
-          positions: initialPositions
+          positions: initialPositions,
+          delayActive: delayActive,
+          delayRemaining: currentDelayFrames
         });
         break;
 
@@ -988,7 +1024,8 @@ self.onmessage = function (e) {
             positions: getValidPositions(),
             count: ropeBodies.length,
             staticCount: staticSegments.size,
-            simulationTime: simulationTime
+            simulationTime: simulationTime,
+            delayActive: false
           });
           break;
         }
@@ -1008,7 +1045,9 @@ self.onmessage = function (e) {
           count: stepResult.segmentCount,
           staticCount: stepResult.staticCount,
           simulationTime: stepResult.simulationTime,
-          rotationAngle: stepResult.rotationAngle
+          rotationAngle: stepResult.rotationAngle,
+          delayActive: stepResult.delayActive,
+          delayRemaining: stepResult.delayRemaining
         });
         break;
 
@@ -1025,6 +1064,16 @@ self.onmessage = function (e) {
         self.postMessage({
           type: 'ropeFinalized',
           positions: getValidPositions()
+        });
+        break;
+
+      case 'setDelay':
+        // Add handler for manual delay setting
+        setStartupDelay(data.frames || STARTUP_DELAY_FRAMES);
+        self.postMessage({
+          type: 'delaySet',
+          delayActive: delayActive,
+          delayRemaining: currentDelayFrames
         });
         break;
 

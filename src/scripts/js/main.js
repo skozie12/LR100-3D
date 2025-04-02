@@ -26,6 +26,11 @@ let coilerAngle = 0;
 let segmentsPerRotation = 12; // Create 12 segments per full rotation
 const segmentAngleInterval = (Math.PI * 2) / segmentsPerRotation; // Angle between segments
 
+// Add delay tracking variables
+let coilerDelayActive = false;
+let coilerDelayFrames = 0;
+const COILER_STARTUP_DELAY = 60; // 1 second at 60fps
+
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
@@ -89,7 +94,13 @@ function initPhysicsWorker() {
       physicsWorker = new Worker(new URL('./physicsWorker.js', import.meta.url), { type: 'module' });
       
       physicsWorker.onmessage = function(e) {
-        const { type, positions, count, staticCount, error, message, debugType } = e.data;
+        const { type, positions, count, staticCount, error, message, debugType, delayActive, delayRemaining } = e.data;
+        
+        // Update delay status from worker
+        if (delayActive !== undefined) {
+          coilerDelayActive = delayActive;
+          coilerDelayFrames = delayRemaining || 0;
+        }
         
         switch(type) {
           case 'initialized':
@@ -111,7 +122,11 @@ function initPhysicsWorker() {
               updateRopeGeometryFromWorker();
             }
             
-            // Remove UI display of static count but keep in console for debugging
+            // Update delay status from stepped message
+            if (delayActive !== undefined) {
+              coilerDelayActive = delayActive;
+              coilerDelayFrames = delayRemaining || 0;
+            }
             break;
             
           case 'ropeReset':
@@ -390,6 +405,10 @@ function resetRopeCompletely() {
   coilerAngle = 0;
   frameCounter = 0;
   
+  // Reset delay status
+  coilerDelayActive = true;
+  coilerDelayFrames = COILER_STARTUP_DELAY;
+  
   if (useWorker && physicsWorker) {
     physicsWorker.postMessage({ 
       type: 'resetRope', 
@@ -607,6 +626,10 @@ function checkAndCreateRope() {
   if (completeConfig()) {
     if (useWorker && physicsWorker) {
       if (ropePositions.length === 0 && !ropeFinalized) {
+        // Also set the delay status locally
+        coilerDelayActive = true;
+        coilerDelayFrames = COILER_STARTUP_DELAY;
+        
         physicsWorker.postMessage({ 
           type: 'createRope',
           data: { 
@@ -626,6 +649,10 @@ function checkAndCreateRope() {
     } else {
       // Original code for direct physics
       if (ropeBodies.length === 0) {
+        // Set delay for direct physics
+        coilerDelayActive = true;
+        coilerDelayFrames = COILER_STARTUP_DELAY;
+        
         createRopeSegments();
         if (!isPlaying) {
           isPlaying = true;
@@ -1427,7 +1454,12 @@ function animate() {
               // Calculate rotation increment for this step - SLOWER ROTATION SPEED
               const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2 (less than half speed)
               const sizeRatio = 0.2 / coilerRadius;
-              const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+              let rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+              
+              // Set rotation speed to 0 if delay is active (visual indicator)
+              if (coilerDelayActive) {
+                rotationSpeed = 0;
+              }
               
               // Calculate angle increment for this physics step
               const angleIncrement = rotationSpeed * fixedTimeStep;
@@ -1456,7 +1488,7 @@ function animate() {
                 data: {
                   timeStep: fixedTimeStep,
                   subSteps: 4,
-                  rotationSpeed: rotationSpeed,
+                  rotationSpeed: rotationSpeed, // Use potentially zero rotation speed during delay
                   rotationAngle: coilerAngle,
                   currentFrame: frameCounter // Pass current frame for age-based static conversion
                 }
@@ -1484,6 +1516,12 @@ function animate() {
             // If not playing or not all components selected, stop coiler rotation
             physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
           }
+        }
+        
+        // Visualize the delay - show a "getting ready" indicator
+        if (coilerDelayActive && completeConfig()) {
+          // Optional: add visual cue that coiler is about to start
+          // For example, you could add a progress bar or text indicator
         }
         
         // Visual rotations happen regardless of physics stepping
@@ -1527,19 +1565,32 @@ function animate() {
             world.step(1/60 / subSteps); // Fixed step of 1/60 with 10 substeps
           }
           
-          // Set proper rotation speeds - SLOWER ROTATION
-          const baseRotationSpeed = -1.2; // Reduced from -2.8 to -1.2
-          const sizeRatio = 0.2 / coilerRadius;
-          const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-          
-          if (coilerBody) {
-            coilerBody.angularVelocity.set(0, 0, rotationSpeed);
-          }
-          if (coilerBodySide1) {
-            coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
-          }
-          if (coilerBodySide2) {
-            coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+          // Handle delay for direct physics mode
+          if (coilerDelayActive) {
+            coilerDelayFrames--;
+            if (coilerDelayFrames <= 0) {
+              coilerDelayActive = false;
+            }
+            
+            // No rotation during delay
+            if (coilerBody) coilerBody.angularVelocity.set(0, 0, 0);
+            if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
+            if (coilerBodySide2) coilerBodySide2.angularVelocity.set(0, 0, 0);
+          } else {
+            // Set proper rotation speeds after delay
+            const baseRotationSpeed = -1.2;
+            const sizeRatio = 0.2 / coilerRadius;
+            const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
+            
+            if (coilerBody) {
+              coilerBody.angularVelocity.set(0, 0, rotationSpeed);
+            }
+            if (coilerBodySide1) {
+              coilerBodySide1.angularVelocity.set(0, 0, rotationSpeed);
+            }
+            if (coilerBodySide2) {
+              coilerBodySide2.angularVelocity.set(0, 0, rotationSpeed);
+            }
           }
           
           // Check for segment limit
