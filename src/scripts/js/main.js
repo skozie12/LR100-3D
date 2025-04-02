@@ -216,6 +216,7 @@ function updateRopeGeometryFromWorker() {
   const points = ropePositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
   
   const curve = new THREE.CatmullRomCurve3(points);
+  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
   window.ropeCurve = curve;
   
   const { tubularSegments, radius, radialSegments } = geometry.userData;
@@ -857,6 +858,7 @@ function createRopeMesh(){
   if (!points || points.length === 0) return;
   
   const curve = new THREE.CatmullRomCurve3(points); 
+  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
   window.ropeCurve = curve;
   
   const tubeGeometry = new THREE.TubeGeometry(
@@ -949,6 +951,7 @@ function updateRopeGeometry() {
   if (!geometry || !geometry.userData) return;
   updateRopeCurve();
   const curve = new THREE.CatmullRomCurve3(ropePoints);
+  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
   window.ropeCurve = curve;
   const { tubularSegments, radius, radialSegments } = geometry.userData;
   const positionAttr = geometry.attributes.position;
@@ -1373,6 +1376,7 @@ function createFloorCoil() {
   }
   
   const coilCurve = new THREE.CatmullRomCurve3(points);
+  coilCurve.tension = 0.1; // Set tension to 0.1 for smoother curves
   const tubeGeometry = new THREE.TubeGeometry(
     coilCurve, 
     points.length, 
@@ -1676,6 +1680,7 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
   const points = positions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
   
   const curve = new THREE.CatmullRomCurve3(points);
+  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
   window.ropeCurve = curve;
   
   const { tubularSegments, radius, radialSegments } = geometry.userData;
