@@ -13,7 +13,7 @@ const COLLISION_GROUPS = {
 // Rope related variables
 let segmentCount = 35; // Reduced from 40 to 35 (5 segments shorter)
 let segmentWidth = 0.012;
-let segmentMass = 0.25; // Reduced from 0.5 to 0.25 (half the weight)
+let segmentMass = 0.15; // Reduced from 0.25 to 0.15 (lighter = less inertia = less shaking)
 let segmentDistance = 0.012;
 let ropeBodies = [];
 let anchorEnd, anchorStart, anchor;
@@ -47,7 +47,7 @@ let activeCoilerType = "100-10"; // Default value
 
 // Refined constants for consistent physics simulation
 const FIXED_TIMESTEP = 1 / 60; // Run at consistent 60Hz physics regardless of framerate
-const FIXED_SUBSTEPS = 4; // Always use 4 substeps for consistent behavior
+const FIXED_SUBSTEPS = 8; // Increase from 4 to 8 for more accurate physics
 
 // Replace the fixed SEGMENT_ANGLE_INCREMENT with a map for each coiler type
 // Slowed down by 5% by increasing the divisor
@@ -85,9 +85,9 @@ let segmentWrapTimes = [];   // Tracks how long each segment has been near coile
 let staticTrackingArray = [];
 
 // Add these parameters for improved rope physics
-let maxConstraintForce = 5e2; // Reduced from 1e3 to allow more stretch
-let constraintStiffness = 3e4; // Lowered stiffness for more elasticity
-const ROPE_STRETCH_FACTOR = 0.85; // New factor to allow more stretch (lower = more stretch)
+let maxConstraintForce = 2e2; // Reduced from 5e2 to limit extreme forces
+let constraintStiffness = 5e4; // Increased from 3e4 for more rigidity
+const ROPE_STRETCH_FACTOR = 0.9; // Increased from 0.85 for less stretch (closer to 1 = less stretch)
 
 // Add a new constant to control initial positioning
 const INITIAL_ROPE_TOP_OFFSET = 0.05; // Distance above coiler for the end anchor
@@ -96,6 +96,10 @@ const INITIAL_ROPE_TOP_OFFSET = 0.05; // Distance above coiler for the end ancho
 const STARTUP_DELAY_FRAMES = 60; // 1 second delay at 60fps
 let currentDelayFrames = 0;
 let delayActive = false;
+
+// Add velocity limiting for segments
+const MAX_VELOCITY = 5.0; // Maximum velocity magnitude for rope segments
+const MAX_ANGULAR_VELOCITY = 10.0; // Maximum angular velocity magnitude
 
 // Restore normal gravity
 function initPhysics() {
@@ -195,9 +199,9 @@ function createRopeSegments() {
     // Explicitly set to DYNAMIC type to ensure it's not static
     segmentBody.type = BODY_TYPES.DYNAMIC;
 
-    // Adjust damping for better friction
-    segmentBody.angularDamping = 0.97; // Increased damping
-    segmentBody.linearDamping = 0.97;
+    // Increase damping significantly for better stability
+    segmentBody.angularDamping = 0.99; // Increased from 0.97
+    segmentBody.linearDamping = 0.99; // Increased from 0.97
 
     world.addBody(segmentBody);
     ropeBodies.push(segmentBody);
@@ -208,11 +212,11 @@ function createRopeSegments() {
     const constraint = new DistanceConstraint(
       ropeBodies[i],
       ropeBodies[i + 1],
-      segmentDistance * ROPE_STRETCH_FACTOR, // Allow more stretch
-      constraintStiffness // Lower stiffness for more elasticity
+      segmentDistance * ROPE_STRETCH_FACTOR, // Allow less stretch
+      constraintStiffness // Increased stiffness for more rigidity
     );
     constraint.collideConnected = false;
-    constraint.maxForce = maxConstraintForce; // Reduced force to allow more stretch
+    constraint.maxForce = maxConstraintForce; // Reduced force to limit extreme forces
     world.addConstraint(constraint);
   }
 
@@ -225,6 +229,26 @@ function createRopeSegments() {
 
   const anchorEndConstraint = new DistanceConstraint(anchorEnd, ropeBodies[segmentCount - 1], 0);
   world.addConstraint(anchorEndConstraint);
+}
+
+// Add a new function to limit velocities of segments
+function limitVelocities() {
+  for (let i = 0; i < ropeBodies.length; i++) {
+    const body = ropeBodies[i];
+    if (!body || body.type === BODY_TYPES.STATIC) continue;
+
+    // Limit linear velocity
+    const vMag = body.velocity.length();
+    if (vMag > MAX_VELOCITY) {
+      body.velocity.scale(MAX_VELOCITY / vMag);
+    }
+
+    // Limit angular velocity
+    const avMag = body.angularVelocity.length();
+    if (avMag > MAX_ANGULAR_VELOCITY) {
+      body.angularVelocity.scale(MAX_ANGULAR_VELOCITY / avMag);
+    }
+  }
 }
 
 // Reset the rope physics
@@ -326,9 +350,12 @@ function stepPhysics(timeStep, subSteps, maxSegments, rotationSpeed, currentRota
 
   totalRotationAngle += angleIncrement;
 
-  // Step the physics world with fixed parameters
+  // Step the physics world with more substeps for stability
   for (let i = 0; i < fixedSubsteps; i++) {
     world.step(fixedStep / fixedSubsteps);
+
+    // Limit velocities after each substep
+    limitVelocities();
   }
 
   // Call separate functions for coiler interactions
@@ -380,7 +407,7 @@ function applyRopeForces(rotationSpeed) {
   const coilerPos = coilerBody.position;
   const rotationDirection = Math.sign(rotationSpeed);
 
-  // Apply stronger forces to non-static rope segments
+  // Apply smoother forces to segments
   for (let i = 0; i < ropeBodies.length; i++) {
     const body = ropeBodies[i];
     if (!body || body.type === BODY_TYPES.STATIC) continue;
@@ -391,7 +418,7 @@ function applyRopeForces(rotationSpeed) {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     // Only affect segments within range
-    const maxRange = coilerRadius * 4; // Increased range
+    const maxRange = coilerRadius * 4;
     if (dist > maxRange) continue;
 
     // Normalized direction toward coiler
@@ -402,33 +429,34 @@ function applyRopeForces(rotationSpeed) {
     const tx = -ny;
     const ty = nx;
 
-    // Strong force toward coiler
+    // Use smoother distance-based force scaling
     const targetDist = coilerRadius + 0.01;
     const distError = dist - targetDist;
-    const forceStrength = 25.0; // Very strong force
+    const distFactor = Math.min(1.0, Math.max(0.0, 1.0 - Math.abs(distError) / maxRange));
+    const forceStrength = 20.0; // Reduced from 25.0 for smoother forces
 
-    const radialForce = distError * forceStrength;
+    const radialForce = distError * forceStrength * distFactor;
     body.applyForce(
       new Vec3(nx * radialForce, ny * radialForce, 0),
       new Vec3(0, 0, 0)
     );
 
-    // Strong tangential force to match coiler rotation - slowed by 5%
-    const tangentialForce = Math.abs(rotationSpeed) * 11.4; // Reduced from 12.0 by 5%
+    // Smooth tangential forces too
+    const tangentialForce = Math.abs(rotationSpeed) * 10.0 * distFactor; // Reduced from 11.4
     body.applyForce(
       new Vec3(tx * tangentialForce * rotationDirection, ty * tangentialForce * rotationDirection, 0),
       new Vec3(0, 0, 0)
     );
 
-    // Strong damping for segments near coiler
+    // Apply stronger damping when near the coiler
     if (Math.abs(distError) < 0.1) {
-      body.velocity.scale(0.8); // More damping
-      body.angularVelocity.scale(0.8);
+      body.velocity.scale(0.75); // More damping (reduced from 0.8)
+      body.angularVelocity.scale(0.75); // More damping
     }
   }
 }
 
-// Update processCoilerContacts for stronger attraction to coiler
+// Update processCoilerContacts for smoother attraction
 function processCoilerContacts() {
   if (!coilerBody || isRopeFinalized) return;
 
@@ -472,37 +500,23 @@ function processCoilerContacts() {
         console.log(`Segment ${i} near coiler, dist: ${distToSurface.toFixed(4)}`);
       }
 
-      // Apply stronger attraction force directly to coiler surface (no offset)
+      // Apply more gradual attraction force
       const nx = dx / dist;
       const ny = dy / dist;
       const targetDist = coilerRadius; // Remove the +0.01 offset
       const distError = dist - targetDist;
 
-      // Apply stronger forces for segments close to the threshold
       let attractionMultiplier = 2.0; // Increased base multiplier
       if (distToSurface > CONTACT_DISTANCE_THRESHOLD * 0.5) {
         attractionMultiplier = 4.0; // Much stronger pull when not quite close enough
       }
 
-      // Apply attraction force
-      const attractionForce = distError * ATTRACTION_STRENGTH * attractionMultiplier;
+      const attractionForce = distError * ATTRACTION_STRENGTH * attractionMultiplier * 0.8; // Reduced by 20%
       body.applyForce(new Vec3(nx * attractionForce, ny * attractionForce, 0), new Vec3(0, 0, 0));
 
-      // Apply tangential force to help segment follow coiler rotation
-      const rotationSpeed = coilerBody.angularVelocity.z;
-      const tx = -ny;
-      const ty = nx;
-      const tangentialForce = Math.abs(rotationSpeed) * 14.25; // Reduced from 15.0 by 5%
-      const rotationDirection = Math.sign(rotationSpeed);
-
-      body.applyForce(
-        new Vec3(tx * tangentialForce * rotationDirection, ty * tangentialForce * rotationDirection, 0),
-        new Vec3(0, 0, 0)
-      );
-
-      // Apply damping for stability
-      body.velocity.scale(0.8);
-      body.angularVelocity.scale(0.8);
+      // Apply smoother damping for stability
+      body.velocity.scale(0.7); // Increased from 0.8 for more damping
+      body.angularVelocity.scale(0.7);
 
       // Make static when very close to the surface
       if (distToSurface < CONTACT_DISTANCE_THRESHOLD * 0.25) {
@@ -604,7 +618,7 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
 
     // Create new segment with improved physics properties
     const newSegment = new Body({
-      mass: 0.25, // Make sure mass > 0 so it's not static
+      mass: segmentMass,
       shape: new Sphere(segmentWidth / 2),
       position: new Vec3(baseSegment.position.x, baseSegment.position.y, baseSegment.position.z),
       material: defaultMaterial,
@@ -640,9 +654,9 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
       newSegment.velocity.set(dx * velocityScale, dy * velocityScale, 0);
     }
 
-    // Better damping for smoother movement
-    newSegment.linearDamping = 0.8; // Less damping to allow segments to reach coiler
-    newSegment.angularDamping = 0.8;
+    // Increase damping for new segments
+    newSegment.linearDamping = 0.95; // Increased from 0.8
+    newSegment.angularDamping = 0.95; // Increased from 0.8
 
     world.addBody(newSegment);
 

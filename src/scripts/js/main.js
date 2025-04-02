@@ -31,6 +31,11 @@ let coilerDelayActive = false;
 let coilerDelayFrames = 0;
 const COILER_STARTUP_DELAY = 60; // 1 second at 60fps
 
+// Add these new variables to control smoothing near the top with other variables
+const POSITION_SMOOTHING_FACTOR = 0.7; // Higher = more smoothing (0-1)
+let previousInterpolatedPositions = []; // Store previous positions for smoothing
+let isFirstFrame = true; // Flag to handle first frame specially
+
 const canvas = document.getElementById('lr100-canvas');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('lightgray');
@@ -858,7 +863,7 @@ function createRopeMesh(){
   if (!points || points.length === 0) return;
   
   const curve = new THREE.CatmullRomCurve3(points); 
-  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
+  curve.tension = 0.1; // Smoother curves with less pronounced bends
   window.ropeCurve = curve;
   
   const tubeGeometry = new THREE.TubeGeometry(
@@ -1133,6 +1138,10 @@ function resetRope(){
     
     isPlaying = false;
     isPaused = false;
+
+    // Reset smoothing variables
+    previousInterpolatedPositions = [];
+    isFirstFrame = true;
     return;
   }
   
@@ -1165,6 +1174,10 @@ function resetRope(){
 
   isPlaying = false;
   isPaused = false;
+
+  // Reset smoothing variables
+  previousInterpolatedPositions = [];
+  isFirstFrame = true;
 }
 
 function createCoiler() {
@@ -1537,16 +1550,23 @@ function animate() {
         // When we have positions to interpolate and render
         if (ropePositions.length > 0 && previousRopePositions.length === ropePositions.length && ropeMeshes.length > 0) {
           // Calculate alpha for interpolation (0 to 1)
-          const alpha = accumulator / fixedTimeStep;
+          const alpha = Math.min(accumulator / fixedTimeStep, 1.0); // Clamp to prevent extreme values
           
-          // Create interpolated positions
+          // Create interpolated positions with clamped movement to reduce jitter
           const interpolatedPositions = ropePositions.map((current, i) => {
             if (i < previousRopePositions.length) {
               const prev = previousRopePositions[i];
+              // Limit maximum position change per frame to reduce jitter
+              const dx = current.x - prev.x;
+              const dy = current.y - prev.y;
+              const dz = current.z - prev.z;
+              
+              const maxDelta = 0.05; // Maximum allowed movement in any direction per frame
+              
               return {
-                x: prev.x + alpha * (current.x - prev.x),
-                y: prev.y + alpha * (current.y - prev.y),
-                z: prev.z + alpha * (current.z - prev.z)
+                x: prev.x + Math.min(Math.max(alpha * dx, -maxDelta), maxDelta),
+                y: prev.y + Math.min(Math.max(alpha * dy, -maxDelta), maxDelta),
+                z: prev.z + Math.min(Math.max(alpha * dz, -maxDelta), maxDelta)
               };
             }
             return current; // Fall back to current if no previous available
@@ -1676,11 +1696,30 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
   const geometry = mesh.geometry;
   if (!geometry || !geometry.userData) return;
   
+  // Apply smoothing between frames to reduce jitter
+  let smoothedPositions = positions;
+  
+  if (!isFirstFrame && previousInterpolatedPositions.length === positions.length) {
+    smoothedPositions = positions.map((pos, i) => {
+      const prev = previousInterpolatedPositions[i];
+      return {
+        x: prev.x + (1 - POSITION_SMOOTHING_FACTOR) * (pos.x - prev.x),
+        y: prev.y + (1 - POSITION_SMOOTHING_FACTOR) * (pos.y - prev.y),
+        z: prev.z + (1 - POSITION_SMOOTHING_FACTOR) * (pos.z - prev.z)
+      };
+    });
+  } else {
+    isFirstFrame = false;
+  }
+  
+  // Store positions for next frame
+  previousInterpolatedPositions = [...smoothedPositions];
+  
   // Convert to Three.js Vector3 objects
-  const points = positions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
+  const points = smoothedPositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
   
   const curve = new THREE.CatmullRomCurve3(points);
-  curve.tension = 0.1; // Set tension to 0.1 for smoother curves
+  curve.tension = 0.1; // Smoother curves
   window.ropeCurve = curve;
   
   const { tubularSegments, radius, radialSegments } = geometry.userData;
