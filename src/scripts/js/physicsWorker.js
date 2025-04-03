@@ -10,6 +10,8 @@ const COLLISION_GROUPS = {
   ANCHOR: 8
 };
 
+const STATIC_CONVERSION_DELAY_FRAMES = 60; // Wait 60 frames before allowing static conversion
+
 // Rope related variables
 let segmentCount = 35; // Reduced from 40 to 35 (5 segments shorter)
 let segmentWidth = 0.012;
@@ -89,7 +91,6 @@ let maxConstraintForce = 2e2; // Reduced from 5e2 to limit extreme forces
 let constraintStiffness = 5e4; // Increased from 3e4 for more rigidity
 const ROPE_STRETCH_FACTOR = 0.9; // Increased from 0.85 for less stretch (closer to 1 = less stretch)
 
-// Add a new constant to control initial positioning
 const INITIAL_ROPE_TOP_OFFSET = 0.05; // Distance above coiler for the end anchor
 
 // Add delay variables at the top with other state variables
@@ -460,8 +461,17 @@ function applyRopeForces(rotationSpeed) {
 function processCoilerContacts() {
   if (!coilerBody || isRopeFinalized) return;
 
-  // Don't allow segments to stick during the first few frames
-  if (frameCounter < 5) return;
+  // Don't allow segments to stick during the first STATIC_CONVERSION_DELAY_FRAMES frames
+  if (frameCounter < STATIC_CONVERSION_DELAY_FRAMES) {
+    // If in delay period, only apply attraction forces but don't make segments static
+    if (frameCounter % 10 === 0) {
+      console.log(`Waiting ${STATIC_CONVERSION_DELAY_FRAMES - frameCounter} more frames before allowing static conversion`);
+    }
+
+    // Apply attraction forces without making static
+    applyAttractionForcesOnly();
+    return;
+  }
 
   const config = COILER_CONFIG?.[activeCoilerType];
   if (!config) return;
@@ -522,6 +532,48 @@ function processCoilerContacts() {
       if (distToSurface < CONTACT_DISTANCE_THRESHOLD * 0.25) {
         makeSegmentStatic(i);
       }
+    }
+  }
+}
+
+// Add new helper function to apply attraction forces without making segments static
+function applyAttractionForcesOnly() {
+  if (!coilerBody) return;
+
+  const config = COILER_CONFIG?.[activeCoilerType];
+  if (!config) return;
+
+  const coilerRadius = config.radius;
+  const coilerPos = coilerBody.position;
+
+  // Only apply attraction forces to segments near coiler
+  for (let i = 0; i < ropeBodies.length; i++) {
+    const body = ropeBodies[i];
+
+    // Skip if body doesn't exist, is static, or an anchor point
+    if (!body || body.type === BODY_TYPES.STATIC || i === 0 || i === midRope) continue;
+
+    // Calculate distance to coiler surface
+    const dx = body.position.x - coilerPos.x;
+    const dy = body.position.y - coilerPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const distToSurface = Math.abs(dist - coilerRadius);
+
+    // If segment is close to coiler surface
+    if (distToSurface < CONTACT_DISTANCE_THRESHOLD * 1.5) { // Use a slightly larger threshold
+      // Apply gradual attraction force
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const targetDist = coilerRadius;
+      const distError = dist - targetDist;
+
+      // Weaker attraction during delay period (70% strength)
+      const attractionForce = distError * ATTRACTION_STRENGTH * 0.7;
+      body.applyForce(new Vec3(nx * attractionForce, ny * attractionForce, 0), new Vec3(0, 0, 0));
+
+      // Apply damping but less aggressive
+      body.velocity.scale(0.85);
+      body.angularVelocity.scale(0.85);
     }
   }
 }
