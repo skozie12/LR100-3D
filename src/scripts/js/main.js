@@ -823,11 +823,11 @@ world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMater
 });
 world.defaultMaterial = defaultMaterial;
 
-// Update segment count to 400
-const segmentCount = 40; // This stays the same - it's the initial segment count
+// Update segment count to 800 (doubled from 400)
+const segmentCount = 80; // Doubled from 40 to 80 - initial segment count
 const segmentWidth = 0.012;
 const segmentMass = 0.5;
-const segmentDistance = 0.012;
+const segmentDistance = 0.006; // Halved from 0.012 to 0.006
 
 const ropeBodies = [];
 const ropePoints = [];
@@ -868,16 +868,17 @@ function createRopeMesh(){
   curve.tension = 0.1; // Smoother curves with less pronounced bends
   window.ropeCurve = curve;
   
+  // Update tube geometry to use doubled segment count
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
-    segmentCount * 4, 
+    segmentCount * 4, // Still use 4x segmentCount for tube smoothness
     ropeRadius * 0.8,
     16, 
     false
   );
   
   tubeGeometry.userData = {
-    tubularSegments: segmentCount * 4,
+    tubularSegments: segmentCount * 4, // Still use 4x segmentCount
     radius: ropeRadius * 0.8,
     radialSegments: 16,
     closed: false
@@ -991,7 +992,8 @@ function updateRopeGeometry() {
   geometry.computeBoundingSphere();
 }
 
-const midRope = 10;
+// Update midRope to 20 (doubled from 10)
+const midRope = 20; // Doubled from 10 to 20
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.225, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
@@ -1012,15 +1014,15 @@ function getMaxSegments(coilerType) {
   return coilerType === "100-200" ? 300 : 400;
 }
 
-// Update addRopeSegment function to check for 400 segments
+// Update addRopeSegment function to work with doubled segment count
 function addRopeSegment(){
   try {
     // Use getMaxSegments for the check
     const maxSegments = getMaxSegments(activeCoilerType);
     if (ropeBodies.length >= maxSegments) return;
-    if (ropeBodies.length < 11) return;
+    if (ropeBodies.length < 22) return; // Changed from 11 to 22 (doubled)
     const anchorEndIndex = ropeBodies.length - 1;
-    const baseSegment = ropeBodies[10];
+    const baseSegment = ropeBodies[20]; // Changed from 10 to 20
     const newBody = new Body({ 
       mass: segmentMass, 
       shape: new Sphere(segmentWidth / 2), 
@@ -1053,13 +1055,14 @@ function addRopeSegment(){
     world.addBody(newBody);
     const constraintsToUpdate = [];
     world.constraints.forEach((constraint) => {
-      if ((constraint.bodyA === ropeBodies[10] && constraint.bodyB === ropeBodies[11]) ||
-          (constraint.bodyA === ropeBodies[11] && constraint.bodyB === ropeBodies[10])) {
+      if ((constraint.bodyA === ropeBodies[20] && constraint.bodyB === ropeBodies[21]) || // Changed from 10,11 to 20,21
+          (constraint.bodyA === ropeBodies[21] && constraint.bodyB === ropeBodies[20])) { // Changed from 11,10 to 21,20
         constraintsToUpdate.push(constraint);
         world.removeConstraint(constraint);
       }
     });
-    const nextBody = ropeBodies[11];
+    const nextBody = ropeBodies[21]; // Changed from 11 to 21
+    
     if (!window.addedSegments) window.addedSegments = 0;
     window.addedSegments++;
     
@@ -1076,13 +1079,13 @@ function addRopeSegment(){
     const maxZ = zRange * 0.45;
     window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
     
-    const tailSegments = ropeBodies.slice(11);
-    ropeBodies.length = 11; 
+    const tailSegments = ropeBodies.slice(21); // Changed from 11 to 21
+    ropeBodies.length = 21; // Changed from 11 to 21
     ropeBodies.push(newBody); 
     ropeBodies.push(...tailSegments); 
     
 
-    const constraintPrev = new DistanceConstraint(ropeBodies[10], newBody, segmentDistance, 1e5);
+    const constraintPrev = new DistanceConstraint(ropeBodies[20], newBody, segmentDistance, 1e5); // Changed from 10 to 20
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
     constraintPrev.collideConnected = false;
     constraintNext.collideConnected = false;

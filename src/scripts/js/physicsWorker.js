@@ -12,15 +12,15 @@ const COLLISION_GROUPS = {
 
 const STATIC_CONVERSION_DELAY_FRAMES = 60; // Wait 60 frames before allowing static conversion
 
-// Rope related variables
-let segmentCount = 35; // Reduced from 40 to 35 (5 segments shorter)
+// Rope related variables - update segment count and distance
+let segmentCount = 70; // Doubled from 35 to 70
 let segmentWidth = 0.012;
 let segmentMass = 0.15; // Reduced from 0.25 to 0.15 (lighter = less inertia = less shaking)
-let segmentDistance = 0.012;
+let segmentDistance = 0.006; // Halved from 0.012 to 0.006
 let ropeBodies = [];
 let anchorEnd, anchorStart, anchor;
 let coilerBody, coilerBodySide1, coilerBodySide2;
-let midRope = 8; // Adjusted from 10 to 8 (scaled down for shorter rope)
+let midRope = 16; // Doubled from 8 to 16 to maintain the same proportions
 
 // Add these variables to replace window references
 let addedSegments = 0;
@@ -654,17 +654,17 @@ function rotateStaticSegments(angleIncrement) {
   }
 }
 
-// Try to add a new segment - only called at specific rotation angles
+// Try to add a new segment - modify indices for doubled segment count
 function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
   // Check limits
   const segmentLimit = maxSegments || (coilerType === "100-200" ? 300 : 400);
   if (ropeBodies.length >= segmentLimit) return false;
-  if (ropeBodies.length < 11) return false;
+  if (ropeBodies.length < 22) return false; // Changed from 11 to 22 (doubled)
 
   try {
-    // Base segment at position 10
-    const baseSegment = ropeBodies[10];
-    const nextSegment = ropeBodies[11];
+    // Base segment at position 20 (was 10)
+    const baseSegment = ropeBodies[20]; // Changed from 10 to 20
+    const nextSegment = ropeBodies[21]; // Changed from 11 to 21
 
     if (!baseSegment || !nextSegment) return false;
 
@@ -712,7 +712,7 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
 
     world.addBody(newSegment);
 
-    // Remove constraint between segments 10 and 11
+    // Remove constraint between segments 20 and 21 (was 10 and 11)
     world.constraints.forEach(constraint => {
       if ((constraint.bodyA === baseSegment && constraint.bodyB === nextSegment) ||
         (constraint.bodyA === nextSegment && constraint.bodyB === baseSegment)) {
@@ -744,15 +744,15 @@ function tryAddSegment(coilerConfig, coilerType, maxSegments, currentAngle) {
       newSegment.position.z += currentZ * 0.3;
     }
 
-    // Insert segment at position 11
-    const tailSegments = ropeBodies.slice(11);
-    ropeBodies.length = 11;
+    // Insert segment at position 21 (was 11)
+    const tailSegments = ropeBodies.slice(21); // Changed from 11 to 21
+    ropeBodies.length = 21; // Changed from 11 to 21
     ropeBodies.push(newSegment);
     ropeBodies.push(...tailSegments);
 
     // Create constraints with improved parameters for more stretch
     const c1 = new DistanceConstraint(baseSegment, newSegment, segmentDistance * ROPE_STRETCH_FACTOR, constraintStiffness);
-    const c2 = new DistanceConstraint(newSegment, ropeBodies[12], segmentDistance * ROPE_STRETCH_FACTOR, constraintStiffness);
+    const c2 = new DistanceConstraint(newSegment, ropeBodies[22], segmentDistance * ROPE_STRETCH_FACTOR, constraintStiffness);
     c1.collideConnected = false;
     c2.collideConnected = false;
     c1.maxForce = maxConstraintForce;
