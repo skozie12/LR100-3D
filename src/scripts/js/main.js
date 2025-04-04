@@ -556,6 +556,7 @@ function onDropdownChange() {
     else if (coilerValue === '100-200.gltf') {
       loadCombo('100-200-STAND.gltf', (model) => {
         standModel = model;
+        standModel.position.set(model.position.x, model.position.y, 0.02);
         checkAndCreateRope();
       });
       loadCombo('100-200-MOVING.gltf', (model) => {
@@ -563,6 +564,7 @@ function onDropdownChange() {
         dummy = new THREE.Object3D();
         dummy.position.set(0.11, 0.04, 0);
         movingModel.add(dummy);
+        movingModel.position.set(model.position.x, model.position.y, 0.02);
         createCoiler();
         createCoilerSides();
         checkAndCreateRope();
