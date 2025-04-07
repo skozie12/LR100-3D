@@ -32,7 +32,7 @@ let coilerDelayFrames = 0;
 const COILER_STARTUP_DELAY = 60; // 1 second at 60fps
 
 // Add these new variables to control smoothing near the top with other variables
-const POSITION_SMOOTHING_FACTOR = 0.7; // Higher = more smoothing (0-1)
+const POSITION_SMOOTHING_FACTOR = 0.6; // Changed from 0.7 (less smoothing = more responsive)
 let previousInterpolatedPositions = []; // Store previous positions for smoothing
 let isFirstFrame = true; // Flag to handle first frame specially
 
@@ -1566,7 +1566,7 @@ function animate() {
               const dy = current.y - prev.y;
               const dz = current.z - prev.z;
               
-              const maxDelta = 0.05; // Maximum allowed movement in any direction per frame
+              const maxDelta = 0.05; // Maximum allowed movement in any direction per framence
               
               return {
                 x: prev.x + Math.min(Math.max(alpha * dx, -maxDelta), maxDelta),
