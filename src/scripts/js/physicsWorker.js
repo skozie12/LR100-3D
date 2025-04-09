@@ -102,6 +102,9 @@ let delayActive = false;
 const MAX_VELOCITY = 5.0; // Maximum velocity magnitude for rope segments
 const MAX_ANGULAR_VELOCITY = 10.0; // Maximum angular velocity magnitude
 
+// Add this variable near the top with other state variables 
+let previousRotationSpeed = 0; // Track previous rotation speed to detect when coiler stops
+
 // Restore normal gravity
 function initPhysics() {
   world = new World({
@@ -1079,6 +1082,21 @@ self.onmessage = function (e) {
         break;
 
       case 'step':
+        // Add detection for coiler stopping (rotation changing from non-zero to zero)
+        if (data.rotationSpeed === 0 && previousRotationSpeed !== 0 && !isRopeFinalized) {
+          console.log("Detected coiler stopped rotating - immediately finalizing rope");
+          makeRopeBodiesStatic();
+          
+          // Send notification that rope has been finalized
+          self.postMessage({
+            type: 'ropeFinalized',
+            positions: getValidPositions()
+          });
+        }
+        
+        // Store current rotation speed for next comparison
+        previousRotationSpeed = data.rotationSpeed;
+        
         // If rope is finalized, still rotate static segments but skip physics
         if (isRopeFinalized) {
           if (data.rotationSpeed !== 0) {
