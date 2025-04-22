@@ -1051,10 +1051,18 @@ self.onmessage = function (e) {
       case 'createCoiler':
         // Store configs
         COILER_CONFIG = data.coilerConfig;
+        const isCoilerTypeChanging = activeCoilerType !== data.activeCoilerType;
         activeCoilerType = data.activeCoilerType;
 
         // Update max segments based on coiler type
         currentMaxSegments = activeCoilerType === "100-200" ? 300 : 400;
+
+        // If coiler type is changing, we need to reset the rope first
+        if (isCoilerTypeChanging) {
+          console.log(`Coiler type changed from ${activeCoilerType} to ${data.activeCoilerType}, resetting rope`);
+          resetRope(true);
+          isRopeFinalized = false;
+        }
 
         // Create physics objects
         createCoiler(data.coilerConfig, data.activeCoilerType);
@@ -1064,7 +1072,9 @@ self.onmessage = function (e) {
         positionEndAnchorAtCoilerTop();
 
         self.postMessage({
-          type: 'coilerCreated'
+          type: 'coilerCreated',
+          coilerType: activeCoilerType,  // Send back the active coiler type
+          maxSegments: currentMaxSegments // Send back the max segments for this coiler
         });
         break;
 
@@ -1161,7 +1171,26 @@ self.onmessage = function (e) {
         });
         break;
 
+      case 'addSegment':
+        // Try adding a segment and respond with success or failure
+        const segmentAdded = tryAddSegment(
+          data.coilerConfig || COILER_CONFIG,
+          data.activeCoilerType || activeCoilerType,
+          data.maxSegments || currentMaxSegments,
+          data.rotationAngle || totalRotationAngle
+        );
+        
+        if (segmentAdded) {
+          self.postMessage({
+            type: 'segmentAdded',
+            positions: getValidPositions(),
+            count: ropeBodies.length
+          });
+        }
+        break;
+
       default:
+        console.warn(`Unknown message type: ${type}`);
         break;
     }
   } catch (err) {

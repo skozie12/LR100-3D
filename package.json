@@ -3,18 +3,20 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "npm run clean && vite build",
+    "preview": "vite preview",
+    "clean": "rimraf dist"
   },
   "dependencies": {
     "ammo.js": "^0.0.10",
     "cannon": "^0.6.2",
     "cannon-es": "^0.20.0",
     "node": "^20.19.0",
-    "npx": "^10.2.2",
+    "npx": "^3.0.0",
     "three": "^0.162.0"
   },
   "devDependencies": {
+    "rimraf": "^5.0.10",
     "vite": "^6.2.2"
   }
 }

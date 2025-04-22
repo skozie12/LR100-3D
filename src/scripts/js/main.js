@@ -404,18 +404,31 @@ let activeCoilerType = "100-10";
 
 // Add this function to ensure complete reset when coiler changes
 function resetRopeCompletely() {
+  // First mark the rope as not finalized
   ropeFinalized = false;
   isPlaying = false;
   
-  // Reset angle tracking
+  // Reset animation state
   coilerAngle = 0;
   frameCounter = 0;
+  
+  // Reset accumulators
+  accumulator = 0.0;
+  physicsTime = 0.0;
+  segmentAccumulator = 0.0;
   
   // Reset delay status
   coilerDelayActive = true;
   coilerDelayFrames = COILER_STARTUP_DELAY;
   
+  // Clear previous rope positions
+  previousRopePositions = [];
+  isFirstFrame = true;
+  
   if (useWorker && physicsWorker) {
+    console.log("Completely resetting rope with worker...");
+    
+    // Send a message to completely reset the rope
     physicsWorker.postMessage({ 
       type: 'resetRope', 
       data: { 
@@ -423,8 +436,12 @@ function resetRopeCompletely() {
         resetSegmentTracking: true 
       }
     });
-    ropePositions = [];
     
+    // Clear our local copy of positions
+    ropePositions = [];
+    previousInterpolatedPositions = [];
+    
+    // Remove visual mesh
     if (ropeMeshes.length > 0) {
       ropeMeshes.forEach(mesh => {
         scene.remove(mesh);
@@ -434,13 +451,17 @@ function resetRopeCompletely() {
       ropeMeshes.length = 0;
     }
   } else {
+    // Original direct physics code
     resetRope();
   }
   
+  // Clean up any timers
   if (segmentTimer) {
     clearInterval(segmentTimer);
     segmentTimer = null;
   }
+  
+  console.log("Rope reset complete. Ready for new configuration.");
 }
 
 // Fix onDropdownChange to use delta time for segment creation
@@ -502,14 +523,20 @@ function onDropdownChange() {
   }
 
   if (coilerValue !== oldCoilerValue) {
+    // Store previous animation state to see if we need to restart it
+    const wasPlaying = isPlaying;
+    
+    // IMPORTANT: First dispose/cleanup UI models
     disposeModel(standModel);
     standModel = null;
     disposeModel(movingModel);
     movingModel = null;
     
     // ALWAYS force a complete reset when coiler changes
+    // Make sure we reset everything before creating new coiler
     resetRopeCompletely();
     
+    // Now update the active coiler type based on the dropdown
     if (coilerValue === '100-10.gltf') {
       activeCoilerType = "100-10";
     }
@@ -520,28 +547,38 @@ function onDropdownChange() {
       activeCoilerType = "100-200";
     }
     
+    // First, create the physics representation
     createCoiler();
     createCoilerSides();
     
+    // Then load the visual models
     if (coilerValue === '100-10.gltf') {
       loadCombo('100-10-STAND.gltf', (model) => {
         standModel = model;
+        // Wait for model to load before checking
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
       loadCombo('100-10-MOVING.gltf', (model) => {
         movingModel = model;
         dummy = new THREE.Object3D();
         dummy.position.set(0.18, 0.06, -0.03);
         movingModel.add(dummy);
+        // Ensure physics objects are created after model loads
         createCoiler();
         createCoilerSides();
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
     }
     else if (coilerValue === '100-99.gltf') {
       loadCombo('100-99-STAND.gltf', (model) => {
         standModel = model;
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
       loadCombo('100-99-MOVING.gltf', (model) => {
         movingModel = model;
@@ -551,6 +588,8 @@ function onDropdownChange() {
         createCoiler();
         createCoilerSides();
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
     }
     else if (coilerValue === '100-200.gltf') {
@@ -558,6 +597,8 @@ function onDropdownChange() {
         standModel = model;
         standModel.position.set(model.position.x, model.position.y, 0.02);
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
       loadCombo('100-200-MOVING.gltf', (model) => {
         movingModel = model;
@@ -568,12 +609,16 @@ function onDropdownChange() {
         createCoiler();
         createCoilerSides();
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
     }
     else if (coilerValue) {
       loadCombo(coilerValue, (model) => {
         standModel = model;
         checkAndCreateRope();
+        // Restart animation if it was playing before
+        if (wasPlaying) restartAnimation();
       });
     } else {
       resetRope();
@@ -610,8 +655,10 @@ function onDropdownChange() {
   } else {
     if (isPlaying) {
       isPlaying = false;
-      clearInterval(segmentTimer);
-      segmentTimer = null;
+      if (segmentTimer) {
+        clearInterval(segmentTimer);
+        segmentTimer = null;
+      }
       
       // Stop coiler rotation if we're using the worker
       if (useWorker && physicsWorker) {
@@ -627,62 +674,6 @@ function onDropdownChange() {
   
   updatePrice();
   checkAndCreateRope();
-}
-
-// Fix checkAndCreateRope to use delta time for segment creation
-function checkAndCreateRope() {
-  if (completeConfig()) {
-    if (useWorker && physicsWorker) {
-      if (ropePositions.length === 0 && !ropeFinalized) {
-        // Also set the delay status locally
-        coilerDelayActive = true;
-        coilerDelayFrames = COILER_STARTUP_DELAY;
-        
-        physicsWorker.postMessage({ 
-          type: 'createRope',
-          data: { 
-            coilerConfig: COILER_CONFIG,
-            activeCoilerType: activeCoilerType,
-            maxSegments: getMaxSegments(activeCoilerType)
-          }
-        });
-        
-        if (!isPlaying) {
-          isPlaying = true;
-          segmentAccumulator = 0.0; // Initialize segment accumulator
-          
-          // Remove the interval timer setup
-        }
-      }
-    } else {
-      // Original code for direct physics
-      if (ropeBodies.length === 0) {
-        // Set delay for direct physics
-        coilerDelayActive = true;
-        coilerDelayFrames = COILER_STARTUP_DELAY;
-        
-        createRopeSegments();
-        if (!isPlaying) {
-          isPlaying = true;
-          segmentAccumulator = 0.0; // Initialize segment accumulator
-          
-          // Remove the interval timer setup
-        }
-      }
-    }
-  } else {
-    if (useWorker) {
-      if (ropePositions.length > 0) {
-        physicsWorker.postMessage({ type: 'resetRope' });
-        ropePositions = [];
-      }
-    } else {
-      // Original code
-      if (ropeBodies.length > 0) {
-        resetRope();
-      }
-    }
-  }
 }
 
 function createRopeSegments() {
@@ -1790,6 +1781,81 @@ function updateVisualRotationsFromPhysics(time) {
   
   if (movingModel) {
     movingModel.rotation.z = -rotationAmount;
+  }
+}
+
+// Function to properly restart the animation after coiler change
+function restartAnimation() {
+  console.log("Restarting animation with new coiler");
+  
+  // Make sure we have a complete configuration before restarting
+  if (!completeConfig()) return;
+  
+  // Reset all animation state
+  isPlaying = true;
+  ropeFinalized = false;
+  coilerAngle = 0;
+  frameCounter = 0;
+  
+  // Reset accumulators
+  accumulator = 0.0;
+  physicsTime = 0.0;
+  segmentAccumulator = 0.0;
+  
+  // Reset delay status
+  coilerDelayActive = true;
+  coilerDelayFrames = COILER_STARTUP_DELAY;
+  
+  // Clear previous rope positions
+  previousRopePositions = [];
+  isFirstFrame = true;
+  
+  // If using worker, create a fresh rope
+  if (useWorker && physicsWorker) {
+    if (ropePositions.length === 0) {
+      physicsWorker.postMessage({ 
+        type: 'createRope',
+        data: { 
+          coilerConfig: COILER_CONFIG,
+          activeCoilerType: activeCoilerType,
+          maxSegments: getMaxSegments(activeCoilerType)
+        }
+      });
+    }
+  } else {
+    // Direct physics implementation
+    if (ropeBodies.length === 0) {
+      createRopeSegments();
+    }
+  }
+}
+
+// Add this function to check if configuration is complete and create rope
+function checkAndCreateRope() {
+  if (completeConfig()) {
+    if (useWorker && physicsWorker) {
+      // Reset rope if it exists
+      if (ropePositions.length > 0) {
+        physicsWorker.postMessage({ type: 'resetRope' });
+        ropePositions = [];
+      }
+      
+      // Create new rope with worker
+      physicsWorker.postMessage({ 
+        type: 'createRope',
+        data: { 
+          coilerConfig: COILER_CONFIG,
+          activeCoilerType: activeCoilerType,
+          maxSegments: getMaxSegments(activeCoilerType)
+        }
+      });
+    } else {
+      // Direct physics implementation
+      if (ropeBodies.length > 0) {
+        resetRope();
+      }
+      createRopeSegments();
+    }
   }
 }
 
