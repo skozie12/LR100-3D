@@ -1798,8 +1798,9 @@ function updateVisualRotationsFromPhysics(time) {
   }
   
   if (spoolModel && counterModel) {
-    spoolModel.rotation.y = -rotationAmount;
-    if (floorCoilMesh) floorCoilMesh.rotation.y = -rotationAmount;
+    // Reverse the rotation direction for the reel stand by removing the negative sign
+    spoolModel.rotation.y = rotationAmount; // Changed from -rotationAmount to rotationAmount
+    if (floorCoilMesh) floorCoilMesh.rotation.y = rotationAmount; // Changed from -rotationAmount to rotationAmount
   }
   
   if (coilerBodyMeshSide1) {
