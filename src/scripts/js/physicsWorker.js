@@ -10,6 +10,15 @@ const COLLISION_GROUPS = {
   ANCHOR: 8
 };
 
+// Add missing variables that were undefined
+let accumulator = 0;
+let physicsTime = 0;
+let coilerAngle = 0;
+
+// Fix physicsTime reference for consistent naming
+const FIXED_TIMESTEP = 1 / 60; // Run at consistent 60Hz physics regardless of framerate
+const FIXED_SUBSTEPS = 8; // Increase from 4 to 8 for more accurate physics
+
 const STATIC_CONVERSION_DELAY_FRAMES = 60; // Wait 60 frames before allowing static conversion
 
 // Rope related variables - update segment count and distance
@@ -46,10 +55,6 @@ let frameCounter = 0; // Added to fix reference error
 // Add reference to coiler config to ensure correct coiler radius is used
 let COILER_CONFIG = null;
 let activeCoilerType = "100-10"; // Default value
-
-// Refined constants for consistent physics simulation
-const FIXED_TIMESTEP = 1 / 60; // Run at consistent 60Hz physics regardless of framerate
-const FIXED_SUBSTEPS = 8; // Increase from 4 to 8 for more accurate physics
 
 // Replace the fixed SEGMENT_ANGLE_INCREMENT with a map for each coiler type
 // Slowed down by 5% by increasing the divisor

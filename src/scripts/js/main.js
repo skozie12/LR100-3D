@@ -471,6 +471,7 @@ function onDropdownChange() {
   const coilerValue = coilerSelect.value;
   const cutterValue = cutterSelect.value;
 
+  // Handle reel changes
   if (reelValue !== oldReelValue) {
     disposeModel(reelModel);
     reelModel = null;
@@ -503,6 +504,7 @@ function onDropdownChange() {
     }
   }
 
+  // Handle counter changes
   if (counterValue !== oldCounterValue) {
     disposeModel(counterModel);
     counterModel = null;
@@ -522,6 +524,7 @@ function onDropdownChange() {
     }
   }
 
+  // Handle coiler changes
   if (coilerValue !== oldCoilerValue) {
     // Store previous animation state to see if we need to restart it
     const wasPlaying = isPlaying;
@@ -625,44 +628,50 @@ function onDropdownChange() {
     }
   }
   
+  // Handle cutter changes - COMPLETELY ISOLATED from rope physics
   if (cutterValue !== oldCutterValue) {
     disposeModel(cutterModel);
     cutterModel = null;
     if (cutterValue) {
       loadCombo(cutterValue, (model) => {
         cutterModel = model;
+        // DO NOT call checkAndCreateRope() here - cutter has no effect on rope
       });
     }
+    // No need to reset the rope when changing cutter
   }
 
-  if (completeConfig()) {
-    if (!isPlaying) {
-      isPlaying = true;
-      
-      // Reset accumulators when starting
-      accumulator = 0.0;
-      physicsTime = 0.0;
-      segmentAccumulator = 0.0; // Reset segment accumulator
-      
-      // Remove setInterval - we'll use delta time instead
-      if (segmentTimer) {
-        clearInterval(segmentTimer);
-        segmentTimer = null;
+  // Only update play state if the core components changed (not the cutter)
+  if (reelValue !== oldReelValue || counterValue !== oldCounterValue || coilerValue !== oldCoilerValue) {
+    if (completeConfig()) {
+      if (!isPlaying) {
+        isPlaying = true;
+        
+        // Reset accumulators when starting
+        accumulator = 0.0;
+        physicsTime = 0.0;
+        segmentAccumulator = 0.0; // Reset segment accumulator
+        
+        // Remove setInterval - we'll use delta time instead
+        if (segmentTimer) {
+          clearInterval(segmentTimer);
+          segmentTimer = null;
+        }
+        
+        // No longer need segmentTimer as we'll add segments in animate()
       }
-      
-      // No longer need segmentTimer as we'll add segments in animate()
-    }
-  } else {
-    if (isPlaying) {
-      isPlaying = false;
-      if (segmentTimer) {
-        clearInterval(segmentTimer);
-        segmentTimer = null;
-      }
-      
-      // Stop coiler rotation if we're using the worker
-      if (useWorker && physicsWorker) {
-        physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+    } else {
+      if (isPlaying) {
+        isPlaying = false;
+        if (segmentTimer) {
+          clearInterval(segmentTimer);
+          segmentTimer = null;
+        }
+        
+        // Stop coiler rotation if we're using the worker
+        if (useWorker && physicsWorker) {
+          physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+        }
       }
     }
   }
@@ -673,7 +682,11 @@ function onDropdownChange() {
   oldCutterValue = cutterValue;
   
   updatePrice();
-  checkAndCreateRope();
+  
+  // Only check and create rope if non-cutter components change
+  if (reelValue !== oldReelValue || counterValue !== oldCounterValue || coilerValue !== oldCoilerValue) {
+    checkAndCreateRope();
+  }
 }
 
 function createRopeSegments() {
@@ -1459,7 +1472,8 @@ function animate() {
           // Worker-based physics - only if playing AND all components are selected
           if (isPlaying && completeConfig()) {
             // Save previous positions before running any steps
-            previousRopePositions = [...ropePositions];
+            // Add a check to make sure ropePositions exists and is an array
+            previousRopePositions = Array.isArray(ropePositions) ? [...ropePositions] : [];
             
             // Run fixed steps at exactly 60fps
             let stepsTaken = 0;
@@ -1531,12 +1545,6 @@ function animate() {
           }
         }
         
-        // Visualize the delay - show a "getting ready" indicator
-        if (coilerDelayActive && completeConfig()) {
-          // Optional: add visual cue that coiler is about to start
-          // For example, you could add a progress bar or text indicator
-        }
-        
         // Visual rotations happen regardless of physics stepping
         if (isPlaying && completeConfig()) {
           // Use consistent rotation based on physics time, not delta time
@@ -1552,6 +1560,12 @@ function animate() {
           const interpolatedPositions = ropePositions.map((current, i) => {
             if (i < previousRopePositions.length) {
               const prev = previousRopePositions[i];
+              // Ensure current and prev are valid objects with x,y,z properties
+              if (!current || !prev || 
+                  typeof current.x === 'undefined' || typeof prev.x === 'undefined') {
+                return current || { x: 0, y: 0, z: 0 }; // Default position if invalid
+              }
+              
               // Limit maximum position change per frame to reduce jitter
               const dx = current.x - prev.x;
               const dy = current.y - prev.y;
@@ -1565,7 +1579,7 @@ function animate() {
                 z: prev.z + Math.min(Math.max(alpha * dz, -maxDelta), maxDelta)
               };
             }
-            return current; // Fall back to current if no previous available
+            return current || { x: 0, y: 0, z: 0 }; // Default position if invalid
           });
           
           // Update the mesh with interpolated positions
@@ -1687,7 +1701,9 @@ function animate() {
 
 // New function for updating rope geometry from interpolated positions
 function updateRopeGeometryFromInterpolatedPositions(positions) {
-  if (ropeMeshes.length === 0 || !ropeMeshes[0]) return;
+  if (!positions || !Array.isArray(positions) || positions.length === 0 ||
+      ropeMeshes.length === 0 || !ropeMeshes[0]) return;
+  
   const mesh = ropeMeshes[0];
   const geometry = mesh.geometry;
   if (!geometry || !geometry.userData) return;
@@ -1697,7 +1713,16 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
   
   if (!isFirstFrame && previousInterpolatedPositions.length === positions.length) {
     smoothedPositions = positions.map((pos, i) => {
+      // Check for null/undefined positions
+      if (!pos || typeof pos.x === 'undefined') {
+        return previousInterpolatedPositions[i] || { x: 0, y: 0, z: 0 };
+      }
+      
       const prev = previousInterpolatedPositions[i];
+      if (!prev || typeof prev.x === 'undefined') {
+        return pos;
+      }
+      
       return {
         x: prev.x + (1 - POSITION_SMOOTHING_FACTOR) * (pos.x - prev.x),
         y: prev.y + (1 - POSITION_SMOOTHING_FACTOR) * (pos.y - prev.y),
@@ -1708,16 +1733,22 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
     isFirstFrame = false;
   }
   
-  // Store positions for next frame
-  previousInterpolatedPositions = [...smoothedPositions];
+  // Store positions for next frame - ensure we have a valid array
+  previousInterpolatedPositions = Array.isArray(smoothedPositions) ? [...smoothedPositions] : [];
   
-  // Convert to Three.js Vector3 objects
-  const points = smoothedPositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
+  // Convert to Three.js Vector3 objects - filter out any invalid positions
+  const points = smoothedPositions
+    .filter(pos => pos && typeof pos.x !== 'undefined')
+    .map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
+  
+  // Make sure we have enough points for the curve
+  if (points.length < 2) return;
   
   const curve = new THREE.CatmullRomCurve3(points);
   curve.tension = 0.1; // Smoother curves
   window.ropeCurve = curve;
   
+  // Rest of the function remains unchanged
   const { tubularSegments, radius, radialSegments } = geometry.userData;
   const positionAttr = geometry.attributes.position;
   if (!positionAttr) return;
