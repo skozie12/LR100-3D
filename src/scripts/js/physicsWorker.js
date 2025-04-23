@@ -21,15 +21,15 @@ const FIXED_SUBSTEPS = 8; // Increase from 4 to 8 for more accurate physics
 
 const STATIC_CONVERSION_DELAY_FRAMES = 60; // Wait 60 frames before allowing static conversion
 
-// Rope related variables - update segment count and distance
-let segmentCount = 70; // Doubled from 35 to 70
-let segmentWidth = 0.012;
-let segmentMass = 0.15; // Reduced from 0.25 to 0.15 (lighter = less inertia = less shaking)
-let segmentDistance = 0.006; // Halved from 0.012 to 0.006
+// Rope related variables - make rope 20% shorter
+const segmentCount = 56; // Reduced by 20% from 70 to 56
+const segmentWidth = 0.012;
+const segmentMass = 0.15; // Reduced from 0.25 to 0.15 (lighter = less inertia = less shaking)
+const segmentDistance = 0.006; // Halved from 0.012 to 0.006
 let ropeBodies = [];
 let anchorEnd, anchorStart, anchor;
 let coilerBody, coilerBodySide1, coilerBodySide2;
-let midRope = 16; // Doubled from 8 to 16 to maintain the same proportions
+const midRope = 13; // Reduced by 20% from 16 to 13 to maintain proportions
 
 // Add these variables to replace window references
 let addedSegments = 0;
@@ -109,6 +109,12 @@ const MAX_ANGULAR_VELOCITY = 10.0; // Maximum angular velocity magnitude
 
 // Add this variable near the top with other state variables 
 let previousRotationSpeed = 0; // Track previous rotation speed to detect when coiler stops
+
+// Add this at the top of the file with other initialization variables
+let initializing = true;
+
+// Add this flag to track whether rope has been initialized
+let isFirstLoad = true;
 
 // Restore normal gravity
 function initPhysics() {
@@ -1026,16 +1032,24 @@ self.onmessage = function (e) {
   try {
     const { type, data } = e.data;
 
-    // Always handle these critical messages
     switch (type) {
       case 'init':
         initPhysics();
-        setStartupDelay(); // Set initial delay
+        initializing = true; // Set flag to indicate we're in initialization
+        isFirstLoad = true; // Mark as first load
+        isRopeFinalized = false; // Explicitly ensure rope isn't finalized
+        setStartupDelay();
         self.postMessage({
           type: 'initialized',
           delayActive: delayActive,
           delayRemaining: currentDelayFrames
         });
+        
+        // After a brief delay, clear the initializing flag
+        setTimeout(() => {
+          initializing = false;
+          console.log("Worker initialization complete - rope is ready for normal operation");
+        }, 500);
         break;
 
       case 'resetRope':
@@ -1043,10 +1057,11 @@ self.onmessage = function (e) {
         simulationTime = 0;
         totalRotationAngle = 0; // Reset explicitly
         lastSegmentAngle = 0;
+        isRopeFinalized = false; // Explicitly ensure rope isn't finalized
+        isFirstLoad = true; // Reset to first load state
 
         // Reset physics objects
         resetRope(data?.resetAngle);
-        isRopeFinalized = false;
 
         self.postMessage({
           type: 'ropeReset'
@@ -1085,8 +1100,28 @@ self.onmessage = function (e) {
 
       case 'createRope':
         createRopeSegments();
-        setStartupDelay(); // Set delay when creating rope
+        isRopeFinalized = false; // Explicitly ensure rope isn't finalized during creation
+        
+        // Set delay when creating rope
+        setStartupDelay(); 
+        
+        // Force all segments to be dynamic
+        for (let i = 0; i < ropeBodies.length; i++) {
+          if (ropeBodies[i]) {
+            ropeBodies[i].type = BODY_TYPES.DYNAMIC;
+            if (ropeBodies[i].mass === 0) {
+              ropeBodies[i].mass = segmentMass;
+              ropeBodies[i].updateMassProperties();
+            }
+          }
+        }
+        
+        // Clear static segments set
+        staticSegments.clear();
+        
         const initialPositions = getValidPositions();
+        
+        console.log("Rope created with " + ropeBodies.length + " dynamic segments");
 
         self.postMessage({
           type: 'ropeCreated',
@@ -1094,11 +1129,13 @@ self.onmessage = function (e) {
           delayActive: delayActive,
           delayRemaining: currentDelayFrames
         });
+        
+        isFirstLoad = false; // No longer first load after creating rope
         break;
 
       case 'step':
-        // Add detection for coiler stopping (rotation changing from non-zero to zero)
-        if (data.rotationSpeed === 0 && previousRotationSpeed !== 0 && !isRopeFinalized) {
+        // Only check for coiler stopping if we're not in initialization phase
+        if (!initializing && !isFirstLoad && data.rotationSpeed === 0 && previousRotationSpeed !== 0 && !isRopeFinalized) {
           console.log("Detected coiler stopped rotating - immediately finalizing rope");
           makeRopeBodiesStatic();
           
@@ -1109,7 +1146,7 @@ self.onmessage = function (e) {
           });
         }
         
-        // Store current rotation speed for next comparison
+        // Always store current rotation speed for next comparison
         previousRotationSpeed = data.rotationSpeed;
         
         // If rope is finalized, still rotate static segments but skip physics
@@ -1124,7 +1161,8 @@ self.onmessage = function (e) {
             count: ropeBodies.length,
             staticCount: staticSegments.size,
             simulationTime: simulationTime,
-            delayActive: false
+            delayActive: false,
+            ropeFinalized: true
           });
           break;
         }
@@ -1146,7 +1184,8 @@ self.onmessage = function (e) {
           simulationTime: stepResult.simulationTime,
           rotationAngle: stepResult.rotationAngle,
           delayActive: stepResult.delayActive,
-          delayRemaining: stepResult.delayRemaining
+          delayRemaining: stepResult.delayRemaining,
+          ropeFinalized: isRopeFinalized
         });
         break;
 

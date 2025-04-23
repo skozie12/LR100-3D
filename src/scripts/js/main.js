@@ -827,11 +827,14 @@ world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMater
 });
 world.defaultMaterial = defaultMaterial;
 
-// Update segment count to 800 (doubled from 400)
-const segmentCount = 80; // Doubled from 40 to 80 - initial segment count
+// Rope configuration parameters - make rope 20% shorter
+const segmentCount = 64; // Reduced by 20% from 80 to 64
 const segmentWidth = 0.012;
 const segmentMass = 0.5;
-const segmentDistance = 0.006; // Halved from 0.012 to 0.006
+const segmentDistance = 0.006;
+
+// Update midRope to 16 (20% less than 20)
+const midRope = 16; // Reduced by 20% from 20 to 16
 
 const ropeBodies = [];
 const ropePoints = [];
@@ -996,8 +999,6 @@ function updateRopeGeometry() {
   geometry.computeBoundingSphere();
 }
 
-// Update midRope to 20 (doubled from 10)
-const midRope = 20; // Doubled from 10 to 20
 const anchorEnd = new Body({ mass: 0 });
 anchorEnd.position.set(0.57, 0.225, 0.025);
 anchorEnd.type = BODY_TYPES.KINEMATIC;
@@ -1798,9 +1799,8 @@ function updateVisualRotationsFromPhysics(time) {
   }
   
   if (spoolModel && counterModel) {
-    // Reverse the rotation direction for the reel stand by removing the negative sign
-    spoolModel.rotation.y = rotationAmount; // Changed from -rotationAmount to rotationAmount
-    if (floorCoilMesh) floorCoilMesh.rotation.y = rotationAmount; // Changed from -rotationAmount to rotationAmount
+    spoolModel.rotation.y = -rotationAmount;
+    if (floorCoilMesh) floorCoilMesh.rotation.y = -rotationAmount;
   }
   
   if (coilerBodyMeshSide1) {
