@@ -672,6 +672,9 @@ function onDropdownChange() {
         if (useWorker && physicsWorker) {
           physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
         }
+        
+        // Explicitly reset all visual rotations to stop spinning
+        resetAllVisualRotations();
       }
     }
   }
@@ -687,6 +690,40 @@ function onDropdownChange() {
   if (reelValue !== oldReelValue || counterValue !== oldCounterValue || coilerValue !== oldCoilerValue) {
     checkAndCreateRope();
   }
+}
+
+// Add a new function to explicitly reset all visual rotations to their starting positions
+function resetAllVisualRotations() {
+  // Reset coiler meshes
+  if (coilerBodyMesh) {
+    coilerBodyMesh.rotation.z = 0;
+  }
+  
+  if (coilerBodyMeshSide1) {
+    coilerBodyMeshSide1.rotation.z = 0;
+  }
+  
+  if (coilerBodyMeshSide2) {
+    coilerBodyMeshSide2.rotation.z = 0;
+  }
+  
+  // Reset moving model
+  if (movingModel) {
+    movingModel.rotation.z = 0;
+  }
+  
+  // Reset spool model
+  if (spoolModel) {
+    spoolModel.rotation.y = 0;
+  }
+  
+  // Reset floor coil
+  if (floorCoilMesh) {
+    floorCoilMesh.rotation.y = 0;
+  }
+  
+  // Reset the coilerAngle to stop ongoing rotation
+  coilerAngle = 0;
 }
 
 function createRopeSegments() {
@@ -724,7 +761,7 @@ function createRopeSegments() {
     world.addBody(segmentBody);
     ropeBodies.push(segmentBody);
   }
-
+  
   for (let i = 0; i < segmentCount - 1; i++) {
     const constraint = new DistanceConstraint(
       ropeBodies[i], 
@@ -736,13 +773,13 @@ function createRopeSegments() {
     constraint.maxForce = 1e3;
     world.addConstraint(constraint);
   }
-
+  
   const anchorConstraint = new DistanceConstraint(anchor, ropeBodies[midRope], 0);
   world.addConstraint(anchorConstraint);
-
+  
   const anchorStartConstraint = new DistanceConstraint(anchorStart, ropeBodies[0], 0);
   world.addConstraint(anchorStartConstraint);
-
+  
   const anchorEndConstraint = new DistanceConstraint(anchorEnd, ropeBodies[segmentCount - 1], 0);
   world.addConstraint(anchorEndConstraint);
   
@@ -787,16 +824,17 @@ function updatePrice() {
   const reelVal = reelSelect.options[reelSelect.selectedIndex]?.id || '';
   const counterVal = counterSelect.options[counterSelect.selectedIndex]?.id || '';
   const cutterVal = cutterSelect.options[cutterSelect.selectedIndex]?.id || '';
-
+  
   const coilerPrice = PRICE_MAP[coilerVal] || 0;
   const reelPrice = PRICE_MAP[reelVal] || 0;
   const counterPrice = PRICE_MAP[counterVal] || 0;
   const cutterPrice = PRICE_MAP[cutterVal] || 0;
-
+  
   let total = coilerPrice + reelPrice + counterPrice + cutterPrice;
   if (counterVal !== '') {
     total += 78;
   }
+  
   if (total === 0) {
     priceDisplay.style.visibility = 'hidden';
   } else {
@@ -814,7 +852,7 @@ const COLLISION_GROUPS = {
   COILER: 1,
   ROPE: 2,
   ROPE_SEGMENT: 4,
-  ANCHOR: 8
+  ANCHOR: 8,
 };
 
 world.defaultContactMaterial = new ContactMaterial(defaultMaterial, defaultMaterial, {
@@ -832,10 +870,8 @@ const segmentCount = 64; // Reduced by 20% from 80 to 64
 const segmentWidth = 0.012;
 const segmentMass = 0.5;
 const segmentDistance = 0.006;
-
 // Update midRope to 16 (20% less than 20)
 const midRope = 16; // Reduced by 20% from 20 to 16
-
 const ropeBodies = [];
 const ropePoints = [];
 const ropeRadius = segmentWidth / 2;
@@ -860,7 +896,7 @@ function createRopeMesh(){
     });
     ropeMeshes.length = 0;
   }
-
+  
   let points;
   if (useWorker) {
     points = ropePositions.map(pos => new THREE.Vector3(pos.x, pos.y, pos.z));
@@ -879,7 +915,7 @@ function createRopeMesh(){
   const tubeGeometry = new THREE.TubeGeometry(
     curve, 
     segmentCount * 4, // Still use 4x segmentCount for tube smoothness
-    ropeRadius * 0.8,
+    ropeRadius * 0.8, 
     16, 
     false
   );
@@ -890,47 +926,47 @@ function createRopeMesh(){
     radialSegments: 16,
     closed: false
   };
-
-  const textureLoader = new THREE.TextureLoader();
   
+  const textureLoader = new THREE.TextureLoader();
   const colourMap = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   });
-
+  
   const normalMap = textureLoader.load('./assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
-
+  
   const roughnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Roughness.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
-
+  
   const metalnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Metalness.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
     texture.repeat.set(8, 1);
   });
-
+  
   const displacementMap = textureLoader.load('./assets/Rope002_1K-JPG_Displacement.jpg', function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
-
+  
   tubeGeometry.computeBoundingBox();
   const boundingBox = tubeGeometry.boundingBox;
   const size = new THREE.Vector3();
   boundingBox.getSize(size);
+  
   const uvAttribute = tubeGeometry.attributes.uv;
   for (let i = 0; i < uvAttribute.count; i++) {
     let u = uvAttribute.getX(i);
     let v = uvAttribute.getY(i);
-    uvAttribute.set(i, u * size.length() * 0.5);
+    uvAttribute.setXY(i, u * size.length() * 0.5, v);
   }
   uvAttribute.needsUpdate = true;
-
+  
   const ropeMaterial = new THREE.MeshStandardMaterial({
     map: colourMap,
     normalMap: normalMap,
@@ -944,10 +980,10 @@ function createRopeMesh(){
     side: THREE.DoubleSide,
     envMapIntensity: 0.5
   });
-
+  
   const tubeMesh = new THREE.Mesh(tubeGeometry, ropeMaterial);
   tubeMesh.castShadow = true;
-  tubeMesh.receiveShadow = true; 
+  tubeMesh.receiveShadow = true;
   scene.add(tubeMesh);
   ropeMeshes.push(tubeMesh);
   if (!renderer.shadowMap.enabled) {
@@ -1045,7 +1081,6 @@ function addRopeSegment(){
       const dx = coilerBody.position.x - baseSegment.position.x;
       const dy = coilerBody.position.y - baseSegment.position.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
-      
       if (dist > 0.1) {
         newBody.velocity.set(
           dx * 0.02, 
@@ -1067,13 +1102,10 @@ function addRopeSegment(){
       }
     });
     const nextBody = ropeBodies[21]; // Changed from 11 to 21
-    
     if (!window.addedSegments) window.addedSegments = 0;
     window.addedSegments++;
-    
     if (!window.currentDirection) window.currentDirection = 1;
     if (!window.currentZ) window.currentZ = 0;
-    
     if (window.addedSegments % 30 === 0) {
       window.currentDirection *= -1;
     }
@@ -1083,13 +1115,11 @@ function addRopeSegment(){
     window.currentZ += window.currentDirection * (zRange / 50) * 0.9;
     const maxZ = zRange * 0.45;
     window.currentZ = Math.max(Math.min(window.currentZ, maxZ), -maxZ);
-    
     const tailSegments = ropeBodies.slice(21); // Changed from 11 to 21
     ropeBodies.length = 21; // Changed from 11 to 21
     ropeBodies.push(newBody); 
     ropeBodies.push(...tailSegments); 
     
-
     const constraintPrev = new DistanceConstraint(ropeBodies[20], newBody, segmentDistance, 1e5); // Changed from 10 to 20
     const constraintNext = new DistanceConstraint(newBody, nextBody, segmentDistance, 1e5);
     constraintPrev.collideConnected = false;
@@ -1099,7 +1129,6 @@ function addRopeSegment(){
     world.addConstraint(constraintPrev);
     world.addConstraint(constraintNext);
     
-
     if (anchorEndIndex === ropeBodies.length - 2) {
       world.constraints.forEach((constraint) => {
         if (constraint instanceof DistanceConstraint && 
@@ -1134,7 +1163,6 @@ function resetRope(){
     physicsWorker.postMessage({ type: 'resetRope' });
     ropePositions = [];
     ropeFinalized = false; // Reset our flag
-    
     if (ropeMeshes.length > 0) {
       ropeMeshes.forEach(mesh => {
         scene.remove(mesh);
@@ -1143,12 +1171,9 @@ function resetRope(){
       });
       ropeMeshes.length = 0;
     }
-    
     segmentAccumulator = 0.0; // Reset segment accumulator
-    
     isPlaying = false;
     isPaused = false;
-
     // Reset smoothing variables
     previousInterpolatedPositions = [];
     isFirstFrame = true;
@@ -1166,7 +1191,6 @@ function resetRope(){
   }
   ropeBodies.length = 0;
   ropePoints.length = 0;
-
   if (ropeMeshes.length > 0) {
     ropeMeshes.forEach(mesh => {
       scene.remove(mesh);
@@ -1175,16 +1199,12 @@ function resetRope(){
     });
     ropeMeshes.length = 0;
   }
-
   window.addedSegments = 0;
   window.currentDirection = 1;
   window.currentZ = 0;
-
   segmentAccumulator = 0.0; // Reset segment accumulator
-
   isPlaying = false;
   isPaused = false;
-
   // Reset smoothing variables
   previousInterpolatedPositions = [];
   isFirstFrame = true;
@@ -1229,32 +1249,26 @@ function createCoiler() {
     
     const bumpRadius = coilerRadius * 0.03;
     const spiralTurns = 6;
-    
     for (let i = 0; i < 32; i++) {
       const angle = (i / 32) * Math.PI * 2 * spiralTurns;
       const zPos = ((i / 32) * coilerHeight) - (coilerHeight / 2);
-      
       const x = coilerRadius * 0.97 * Math.cos(angle);
       const y = coilerRadius * 0.97 * Math.sin(angle);
-      
       const bumpShape = new Sphere(bumpRadius);
       coilerBody.addShape(bumpShape, new Vec3(x, y, zPos));
     }
     coilerBody.position.set(0.57, 0.225, config.zOffset);
     world.addBody(coilerBody);
-  
     /* Visual Meshes for Coiler Physics Objects
     const cylinderGeo = new THREE.CylinderGeometry(coilerRadius, coilerRadius, coilerHeight, 16, 1);
     cylinderGeo.rotateZ(Math.PI / 2); 
     cylinderGeo.rotateY(Math.PI / 2); 
-  
     const wireMat = new THREE.MeshBasicMaterial({
       color: config.color,
       transparent: true,
       opacity: 0.2,
       wireframe: true,
     });
-  
     coilerBodyMesh = new THREE.Mesh(cylinderGeo, wireMat);
     coilerBodyMesh.position.set(0.57, 0.225, config.zOffset);
     scene.add(coilerBodyMesh);
@@ -1266,24 +1280,23 @@ function createCoilerSides() {
   if (coilerBodySide1) {
     world.removeBody(coilerBodySide1);
     coilerBodySide1 = null;
-  }
+  } 
   if (coilerBodySide2) {
     world.removeBody(coilerBodySide2);
     coilerBodySide2 = null;
-  }
-
+  }   
   if (coilerBodyMeshSide1) {
     scene.remove(coilerBodyMeshSide1);
     coilerBodyMeshSide1.geometry.dispose();
     coilerBodyMeshSide1.material.dispose();
     coilerBodyMeshSide1 = null;
-  }
+  } 
   if (coilerBodyMeshSide2) {
     scene.remove(coilerBodyMeshSide2);
     coilerBodyMeshSide2.geometry.dispose();
     coilerBodyMeshSide2.material.dispose();
     coilerBodyMeshSide2 = null;
-  }
+  } 
   const config = COILER_CONFIG[activeCoilerType];
   const sideRadiusMultiplier = activeCoilerType === "100-10" ? 2.0 : 
                                activeCoilerType === "100-99" ? 2.1 : 2.2;
@@ -1294,25 +1307,23 @@ function createCoilerSides() {
     coilerHeight / 10, 
     16
   );
- 
+  
   coilerBodySide1 = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  
   coilerBodySide1.position.set(0.57, 0.225, config.sideOffset1);
   coilerBodySide1.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide1);
-
+  
   coilerBodySide2 = new Body({ 
     mass: 0, 
     type: BODY_TYPES.KINEMATIC, 
     shape: cylinderShapeSide, 
     material: defaultMaterial 
   });
-  
   coilerBodySide2.position.set(0.57, 0.225, config.sideOffset2);
   coilerBodySide2.quaternion.setFromEuler(Math.PI / 2, 0, 0); 
   world.addBody(coilerBodySide2);
@@ -1331,24 +1342,23 @@ function createCoilerSides() {
     16, 
     1
   );
-
+ 
   cylinderGeoSide1.rotateX(Math.PI / 2);
   cylinderGeoSide2.rotateX(Math.PI / 2);
-
-  /*const wireMatSide = new THREE.MeshBasicMaterial({
+  /*
+  const wireMatSide = new THREE.MeshBasicMaterial({
     color: config.color,
     transparent: true,
     opacity: 0.2,
     wireframe: true,
   });
-
   coilerBodyMeshSide1 = new THREE.Mesh(cylinderGeoSide1, wireMatSide);
   coilerBodyMeshSide1.position.set(0.57, 0.225, config.sideOffset1);
   scene.add(coilerBodyMeshSide1);
-  
   coilerBodyMeshSide2 = new THREE.Mesh(cylinderGeoSide2, wireMatSide);
   coilerBodyMeshSide2.position.set(0.57, 0.225, config.sideOffset2);
-  scene.add(coilerBodyMeshSide2);*/
+  scene.add(coilerBodyMeshSide2);
+  */
 }
 
 let spoolModel = null;
@@ -1356,7 +1366,6 @@ let spoolModel = null;
 function loadSpoolFromMovingAssets() {
   if (spoolModel) {
     disposeModel(spoolModel);
-
     spoolModel = null;
   }
   loader.load(
@@ -1372,7 +1381,9 @@ function loadSpoolFromMovingAssets() {
     (error) => console.error('Error loading spool model:', error)
   );
 }
+
 let floorCoilMesh = null;
+
 function createFloorCoil() {
   if (floorCoilMesh) {
     scene.remove(floorCoilMesh);
@@ -1380,17 +1391,16 @@ function createFloorCoil() {
     floorCoilMesh.material.dispose();
     floorCoilMesh = null;
   }
-
+  
   const points = [];
   const coilRadius = 0.12;
   const coilHeight = 0.23;
   const turns = 25;
   const pointsPerTurn = 24;
-
+  
   for (let i = 0; i <= turns * pointsPerTurn; i++) {
     const t = i / (turns * pointsPerTurn);
     const angle = turns * Math.PI * 2 * t;
-    
     points.push(new THREE.Vector3(
       coilRadius * Math.cos(angle), 
       -0.74 + (coilHeight * t) + 0.7,  
@@ -1461,7 +1471,6 @@ function animate() {
               maxSegments: maxSegments 
             }
           });
-          
           if (segmentTimer) {
             clearInterval(segmentTimer);
             segmentTimer = null;
@@ -1543,10 +1552,14 @@ function animate() {
           } else if (!isPlaying || !completeConfig()) {
             // If not playing or not all components selected, stop coiler rotation
             physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
+            // Also reset visual rotations to ensure everything stops completely
+            if (!isPlaying) {
+              resetAllVisualRotations();
+            }
           }
         }
         
-        // Visual rotations happen regardless of physics stepping
+        // Only update visual rotations if we're actively playing
         if (isPlaying && completeConfig()) {
           // Use consistent rotation based on physics time, not delta time
           updateVisualRotationsFromPhysics(physicsTime);
@@ -1572,7 +1585,7 @@ function animate() {
               const dy = current.y - prev.y;
               const dz = current.z - prev.z;
               
-              const maxDelta = 0.05; // Maximum allowed movement in any direction per framence
+              const maxDelta = 0.05; // Maximum allowed movement in any direction per frame
               
               return {
                 x: prev.x + Math.min(Math.max(alpha * dx, -maxDelta), maxDelta),
@@ -1606,7 +1619,6 @@ function animate() {
             if (coilerDelayFrames <= 0) {
               coilerDelayActive = false;
             }
-            
             // No rotation during delay
             if (coilerBody) coilerBody.angularVelocity.set(0, 0, 0);
             if (coilerBodySide1) coilerBodySide1.angularVelocity.set(0, 0, 0);
@@ -1616,7 +1628,6 @@ function animate() {
             const baseRotationSpeed = -1.2;
             const sizeRatio = 0.2 / coilerRadius;
             const rotationSpeed = baseRotationSpeed * Math.min(sizeRatio, 1.5);
-            
             if (coilerBody) {
               coilerBody.angularVelocity.set(0, 0, rotationSpeed);
             }
@@ -1682,7 +1693,7 @@ function animate() {
           
           // Always update the rope geometry if we have bodies
           if (ropeBodies.length > 0) {
-            if (ropeMeshes.length > 0 && ropeMeshes[0]) {
+            if (ropeMeshes.length > 0 && ropeMeshes[0]) { 
               updateRopeGeometry();
             } else {
               createRopeMesh();
@@ -1718,7 +1729,6 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
       if (!pos || typeof pos.x === 'undefined') {
         return previousInterpolatedPositions[i] || { x: 0, y: 0, z: 0 };
       }
-      
       const prev = previousInterpolatedPositions[i];
       if (!prev || typeof prev.x === 'undefined') {
         return pos;
@@ -1753,11 +1763,9 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
   const { tubularSegments, radius, radialSegments } = geometry.userData;
   const positionAttr = geometry.attributes.position;
   if (!positionAttr) return;
-  
   const frames = curve.computeFrenetFrames(tubularSegments, false);
   const vertex = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  
   let idx = 0;
   for (let i = 0; i <= tubularSegments; i++) {
     const u = i / tubularSegments;
@@ -1765,23 +1773,19 @@ function updateRopeGeometryFromInterpolatedPositions(positions) {
     const tangent = curve.getTangentAt(u);
     const N = frames.normals[i];
     const B = frames.binormals[i];
-    
     for (let j = 0; j <= radialSegments; j++) {
       const v = j / radialSegments * Math.PI * 2;
       const sin = Math.sin(v);
       const cos = -Math.cos(v);
-      
       normal.x = cos * N.x + sin * B.x;
       normal.y = cos * N.y + sin * B.y;
       normal.z = cos * N.z + sin * B.z;
       normal.multiplyScalar(radius);
-      
       vertex.copy(point).add(normal);
       positionAttr.setXYZ(idx, vertex.x, vertex.y, vertex.z);
       idx++;
     }
   }
-  
   positionAttr.needsUpdate = true;
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -1797,10 +1801,11 @@ function updateVisualRotationsFromPhysics(time) {
   if (coilerBodyMesh) {
     coilerBodyMesh.rotation.z = rotationAmount;
   }
-  
+   
   if (spoolModel && counterModel) {
-    spoolModel.rotation.y = -rotationAmount;
-    if (floorCoilMesh) floorCoilMesh.rotation.y = -rotationAmount;
+    // Changed from -rotationAmount to rotationAmount to make the reel stand rotate in the opposite direction
+    spoolModel.rotation.y = rotationAmount;
+    if (floorCoilMesh) floorCoilMesh.rotation.y = rotationAmount;
   }
   
   if (coilerBodyMeshSide1) {
@@ -1819,7 +1824,6 @@ function updateVisualRotationsFromPhysics(time) {
 // Function to properly restart the animation after coiler change
 function restartAnimation() {
   console.log("Restarting animation with new coiler");
-  
   // Make sure we have a complete configuration before restarting
   if (!completeConfig()) return;
   
