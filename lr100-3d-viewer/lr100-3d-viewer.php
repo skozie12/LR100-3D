@@ -10,24 +10,24 @@ Author: Duncan Smith
 if (!defined('ABSPATH')) exit;
 
 class LR100_3D_Viewer {
-    private static \ = null;
+    private static $instance = null;
     
     // Singleton pattern
     public static function get_instance() {
     
-        if (self::\ === null) {
-            self::\ = new self();
+        if (self::$instance === null) {
+            self::$instance = new self();
         }
-        return self::\;
+        return self::$instance;
     }
     
     private function __construct() {
         // Register scripts, styles & shortcode
-        add_action('wp_enqueue_scripts', array(\, 'register_assets'));
-        add_shortcode('lr100_3d', array(\, 'lr100_3d_shortcode'));
+        add_action('wp_enqueue_scripts', array($this, 'register_assets'));
+        add_shortcode('lr100_3d', array($this, 'lr100_3d_shortcode'));
         
         // Register activation hook
-        register_activation_hook(__FILE__, array(\, 'activate_plugin'));
+        register_activation_hook(__FILE__, array($this, 'activate_plugin'));
     }
     
     public function activate_plugin() {
@@ -40,77 +40,76 @@ class LR100_3D_Viewer {
     
     public function register_assets() {
         // Get all files from the dist/assets directory
-        \ = plugin_dir_path(__FILE__) . 'dist/assets';
-        \ = plugin_dir_url(__FILE__) . 'dist/assets';
+        $assets_dir = plugin_dir_path(__FILE__) . 'dist/assets';
+        $assets_url = plugin_dir_url(__FILE__) . 'dist/assets';
         
         // Register main CSS file(s)
-        \ = glob(\ . '/*.css');
-        if (!empty(\)) {
-            foreach (\ as \) {
-                \ = basename(\);
-                \ = 'lr100-3d-' . pathinfo(\, PATHINFO_FILENAME);
+        $css_files = glob($assets_dir . '/*.css');
+        if (!empty($css_files)) {
+            foreach ($css_files as $css_file) {
+                $css_filename = basename($css_file);
+                $css_handle = 'lr100-3d-' . pathinfo($css_filename, PATHINFO_FILENAME);
                 wp_register_style(
-                    \,
-                    \ . '/' . \,
+                    $css_handle,
+                    $assets_url . '/' . $css_filename,
                     array(),
-                    filemtime(\)
+                    filemtime($css_file)
                 );
             }
         }
         
         // Register main JS file(s)
-        \ = glob(\ . '/*.js');
-        if (!empty(\)) {
-            foreach (\ as \) {
-                \ = basename(\);
-                \ = 'lr100-3d-' . pathinfo(\, PATHINFO_FILENAME);
+        $js_files = glob($assets_dir . '/*.js');
+        if (!empty($js_files)) {
+            foreach ($js_files as $js_file) {
+                $js_filename = basename($js_file);
+                $js_handle = 'lr100-3d-' . pathinfo($js_filename, PATHINFO_FILENAME);
                 wp_register_script(
-                    \,
-                    \ . '/' . \,
+                    $js_handle,
+                    $assets_url . '/' . $js_filename,
                     array(), 
-                    filemtime(\),
+                    filemtime($js_file),
                     true
                 );
             }
         }
     }
     
-    public function lr100_3d_shortcode(\) {
+    public function lr100_3d_shortcode($atts) {
         // Extract attributes
-        \ = shortcode_atts(array(
+        $atts = shortcode_atts(array(
             'width' => '100%',
             'height' => '600px',
-        ), \);
+        ), $atts);
         
         // Enqueue all registered styles and scripts
-        \ = glob(plugin_dir_path(__FILE__) . 'dist/assets/*.css');
-        if (!empty(\)) {
-            foreach (\ as \) {
-                \ = 'lr100-3d-' . pathinfo(basename(\), PATHINFO_FILENAME);
-                wp_enqueue_style(\);
+        $css_files = glob(plugin_dir_path(__FILE__) . 'dist/assets/*.css');
+        if (!empty($css_files)) {
+            foreach ($css_files as $css_file) {
+                $css_handle = 'lr100-3d-' . pathinfo(basename($css_file), PATHINFO_FILENAME);
+                wp_enqueue_style($css_handle);
             }
         }
         
-        \ = glob(plugin_dir_path(__FILE__) . 'dist/assets/*.js');
-        if (!empty(\)) {
-            foreach (\ as \) {
-                \ = 'lr100-3d-' . pathinfo(basename(\), PATHINFO_FILENAME);
-                wp_enqueue_script(\);
+        $js_files = glob(plugin_dir_path(__FILE__) . 'dist/assets/*.js');
+        if (!empty($js_files)) {
+            foreach ($js_files as $js_file) {
+                $js_handle = 'lr100-3d-' . pathinfo(basename($js_file), PATHINFO_FILENAME);
+                wp_enqueue_script($js_handle);
             }
         }
         
         // Define inline styles for the container
-        \ = 'width: ' . esc_attr(\['width']) . '; height: ' . esc_attr(\['height']) . ';';
+        $styles = 'width: ' . esc_attr($atts['width']) . '; height: ' . esc_attr($atts['height']) . ';';
         
         // Output the container divs with required IDs
-        \ = '<div id=\
-lr100-canvas-container\ style=\ . \$styles . \>';
-        \ .= '<canvas id=\lr100-canvas\></canvas>';
-        \ .= '<div id=\canvas-overlay\></div>';
-        \ .= '<div id=\price-display\></div>';
-        \ .= '</div>';
+        $output = '<div id="lr100-canvas-container" style="' . $styles . '">';
+        $output .= '<canvas id="lr100-canvas"></canvas>';
+        $output .= '<div id="canvas-overlay"></div>';
+        $output .= '<div id="price-display"></div>';
+        $output .= '</div>';
         
-        return \;
+        return $output;
     }
 }
 
