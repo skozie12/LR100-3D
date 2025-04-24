@@ -298,168 +298,215 @@ HTML;
                 }
                 
                 // Additional specific pattern matching for model files mentioned in errors known models
-                if (url.includes('/assets/LR100-284.gltf') || 
+                if (url.includes('/assets/LR100-284.gltf') || se().endsWith('.gltf'))) {
                     url.includes('/assets/284-SPOOL.gltf') ||
                     url.includes('/assets/1410.gltf')) {
-                    const fileName = url.split('/').pop();f') ||
-                    newUrl = assetsUrl + '/' + fileName;gltf') ||
-                    modified = true;rn matching for any GLTF file
-                    console.log('LR100: Fixed specific model URL:', url, '->', newUrl);{
-                }   const fileName = url.split('/').pop();
+                    const fileName = url.split('/').pop();
+                    newUrl = assetsUrl + '/' + fileName;rl, '->', newUrl);
+                    modified = true;
+                    console.log('LR100: Fixed specific model URL:', url, '->', newUrl);
+                }
+                );
+                // General pattern matching for any GLTF file
+                if (url.includes('/assets/') && url.toLowerCase().endsWith('.gltf')) {
+                    const fileName = url.split('/').pop();n originalFetch(url, options);
                     newUrl = assetsUrl + '/' + fileName;
-                if (modified) {true;
-                    return originalFetch(newUrl, options); url, '->', newUrl);
+                    modified = true;
+                    console.log('LR100: Fixed general GLTF model URL:', url, '->', newUrl);might use it instead of fetch
+                }ginalXHROpen = XMLHttpRequest.prototype.open;
+                
+                if (modified) {
+                    return originalFetch(newUrl, options);
                 }
-            }   
+            }
             return originalFetch(url, options);
-        };          return originalFetch(newUrl, options);
-                }
+        };s/')) {
+        ts/').pop();
         // Also intercept XMLHttpRequest for loaders that might use it instead of fetch
         const originalXHROpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        XMLHttpRequest.prototype.open = function(method, url, ...rest) {url, '->', newUrl);
             if (typeof url === 'string') {
-                let newUrl = url;Request for loaders that might use it instead of fetch
-                let modified = false;tpRequest.prototype.open;
-                equest.prototype.open = function(method, url, ...rest) {
+                let newUrl = url;
+                let modified = false;les
+                werCase().endsWith('.gltf'))) {
                 // Check for the specific path pattern
                 if (url.includes('/length-measurement-configurator/assets/')) {
                     const assetName = url.split('/assets/').pop();
-                    newUrl = assetsUrl + '/' + assetName;
-                    modified = true;cific path pattern
-                    console.log('LR100: Fixed XHR URL:', url, '->', newUrl);) {
-                }   const assetName = url.split('/assets/').pop();
-                    newUrl = assetsUrl + '/' + assetName;
-                // Additional specific pattern matching for model files
-                if (url.includes('/assets/LR100-284.gltf') || '->', newUrl);
-                    url.includes('/assets/284-SPOOL.gltf') ||
-                    url.includes('/assets/1410.gltf')) {
-                    const fileName = url.split('/').pop();atching - expanded to match fetch handler
-                    newUrl = assetsUrl + '/' + fileName;') || 
-                    modified = true;ssets/284-SPOOL.gltf') ||
-                    console.log('LR100: Fixed specific XHR model URL:', url, '->', newUrl);
-                }   url.includes('/assets/100-99-STAND.gltf') ||
-                    url.includes('/assets/100-99-MOVING.gltf') ||
-                return originalXHROpen.call(this, method, modified ? newUrl : url, ...rest);
-            }       (url.includes('/assets/') && url.toLowerCase().endsWith('.gltf'))) {
-            return originalXHROpen.apply(this, arguments);
-        };          newUrl = assetsUrl + '/' + fileName;
+                    newUrl = assetsUrl + '/' + assetName;RL:', url, '->', newUrl);
                     modified = true;
-        // Create a map of known problematic model files and their correct paths', newUrl);
-        const modelMap = {
+                    console.log('LR100: Fixed XHR URL:', url, '->', newUrl);
+                }ified ? newUrl : url, ...rest);
+                
+                // Additional specific pattern matching for model files
+                if (url.includes('/assets/LR100-284.gltf') || 
+                    url.includes('/assets/284-SPOOL.gltf') ||
+                    url.includes('/assets/1410.gltf') ||
+                    url.includes('/assets/100-99-STAND.gltf') ||
+                    url.includes('/assets/100-99-MOVING.gltf') ||
+                    (url.includes('/assets/') && url.toLowerCase().endsWith('.gltf'))) {Url + '/LR100-284.gltf',
+                    const fileName = url.split('/').pop();
+                    newUrl = assetsUrl + '/' + fileName;ssetsUrl + '/1410.gltf',
+                    modified = true;
+                    console.log('LR100: Fixed specific XHR model URL:', url, '->', newUrl);
+                }gltf',
+                
+                return originalXHROpen.call(this, method, modified ? newUrl : url, ...rest);
+            }
+            return originalXHROpen.apply(this, arguments);
+        };
+
+        // Create a map of known problematic model files and their correct paths  '100-10-MOVING.gltf': assetsUrl + '/100-10-MOVING.gltf',
+        const modelMap = {    
             'LR100-284.gltf': assetsUrl + '/LR100-284.gltf',
-            '284-SPOOL.gltf': assetsUrl + '/284-SPOOL.gltf',dified ? newUrl : url, ...rest);
+            '284-SPOOL.gltf': assetsUrl + '/284-SPOOL.gltf',ltf',
             '1410.gltf': assetsUrl + '/1410.gltf',
-            '100-10.gltf': assetsUrl + '/100-10.gltf',ts);
+            '100-10.gltf': assetsUrl + '/100-10.gltf',
             '100-99.gltf': assetsUrl + '/100-99.gltf',
-            '100-200.gltf': assetsUrl + '/100-200.gltf',
-            '1410C.gltf': assetsUrl + '/1410C.gltf',files and their correct paths
-            '100-99-STAND.gltf': assetsUrl + '/100-99-STAND.gltf',nst modelMap = {
-            '100-99-MOVING.gltf': assetsUrl + '/100-99-MOVING.gltf'    'LR100-284.gltf': assetsUrl + '/LR100-284.gltf',
+            '100-200.gltf': assetsUrl + '/100-200.gltf',rror handling
+            '1410C.gltf': assetsUrl + '/1410C.gltf',
+            '100-99-STAND.gltf': assetsUrl + '/100-99-STAND.gltf',
+            '100-99-MOVING.gltf': assetsUrl + '/100-99-MOVING.gltf'ded to lr100LoadModel');
         };
         
         // Directly inject a helper function to handle model loading
-        window.lr100LoadModel = function(modelName, callback) {
-            const correctPath = modelMap[modelName] || (assetsUrl + '/' + modelName);'100-200.gltf': assetsUrl + '/100-200.gltf',
+        window.lr100LoadModel = function(modelName, callback) {elName] || (assetsUrl + '/' + modelName);
+            const correctPath = modelMap[modelName] || (assetsUrl + '/' + modelName);ad model from:', correctPath);
             console.log('LR100: Attempting to load model from:', correctPath);
             
-            // First try fetch to verify the file exists
-            fetch(correctPath, { method: 'HEAD' })nction to handle model loading
+            // First try fetch to verify the file existsindow.loader.load) {
+            fetch(correctPath, { method: 'HEAD' }):', modelName);
                 .then(response => {
-                    if (response.ok) {+ '/' + modelName);
-                        console.log('LR100: Model file confirmed to exist:', modelName);oad model from:', correctPath);
+                    if (response.ok) {load(
+                        console.log('LR100: Model file confirmed to exist:', modelName);
                         if (window.loader && window.loader.load) {
-                            window.loader.load(e exists
-                                correctPath,
-                                function(gltf) {
-                                    console.log('LR100: Successfully loaded model:', modelName);k) {
-                                    if (callback) callback(gltf.scene);le confirmed to exist:', modelName);
+                            window.loader.load(R100: Successfully loaded model:', modelName);
+                                correctPath,f.scene);
+                                function(gltf) {,
+                                    console.log('LR100: Successfully loaded model:', modelName);) {
+                                    if (callback) callback(gltf.scene);
                                 },
-                                function(progress) {.loader.load(
-                                    // Progress tracking if needed
+                                function(progress) {              const percentComplete = Math.round((progress.loaded / progress.total) * 100);
+                                    // Progress tracking if needed`LR100: Model ${modelName} loading: ${percentComplete}%`);
                                 },
-                                function(error) {   console.log('LR100: Successfully loaded model:', modelName);
-                                    console.error('LR100: Error loading model despite file existing:', modelName, error);      if (callback) callback(gltf.scene);
-                                }       },
-                            );    function(progress) {
-                        }
-                    } else {           },
-                        console.error('LR100: Model file not found at:', correctPath);              function(error) {
-                    }   console.error('LR100: Error loading model despite file existing:', modelName, error);
-                })
-                .catch(error => {         );
-                    console.error('LR100: Error checking model file:', error);              }
-                });            } else {
-        };d at:', correctPath);
+                                function(error) {
+                                    console.error('LR100: Error loading model despite file existing:', modelName, error);n(error) {
+                                }                    console.error('LR100: Error loading model:', modelName, error);
+                            );k for critical models
+                        }dow.THREE.GLTFLoader) {
+                    } else {
+                        console.error('LR100: Model file not found at:', correctPath);dow.THREE.GLTFLoader();
+                    }                    loader.load(correctPath, 
+                })(gltf) {
+                .catch(error => {
+                    console.error('LR100: Error checking model file:', error);tf.scene);
+                });                    },
+        };
         
-        // Monitor for specific error messages and try to recover
+        // Monitor for specific error messages and try to recoverror('LR100: Fallback loading failed:', modelName, fallbackError);
         const originalConsoleError = console.error;
-        console.error = function(...args) {        console.error('LR100: Error checking model file:', error);
+        console.error = function(...args) {
             originalConsoleError.apply(console, args);
             
             const errorMsg = args.join(' ');
-            if (errorMsg.includes('Error loading combo file') || or for specific error messages and try to recover
-                errorMsg.includes('Error loading spool model')) {
+            if (errorMsg.includes('Error loading combo file') || ch (e) {
+                errorMsg.includes('Error loading spool model')) {            console.error('LR100: Exception during model loading:', e);
                 
-                // Extract model name from error message if possiblegs);
-                const modelMatch = errorMsg.match(/\/assets\/([^"]+\.gltf)/);
+                // Extract model name from error message if possible
+                const modelMatch = errorMsg.match(/\/assets\/([^"]+\.gltf)/);LR100: GLTFLoader not available');
                 if (modelMatch && modelMatch[1]) {
-                    const modelName = modelMatch[1];o file') || 
-                    console.log('LR100: Attempting recovery for failed model:', modelName);rrorMsg.includes('Error loading spool model')) {
-                    window.lr100LoadModel(modelName);   
-                }      // Extract model name from error message if possible
-            }        const modelMatch = errorMsg.match(/\/assets\/([^"]+\.gltf)/);
-        };Match[1]) {
+                    const modelName = modelMatch[1];
+                    console.log('LR100: Attempting recovery for failed model:', modelName);
+                    window.lr100LoadModel(modelName);r specific error messages and try to recover
+                }
+            }on(...args) {
+        };
         
-        // Load the main JS as a module('LR100: Attempting recovery for failed model:', modelName);
+        // Load the main JS as a modulerorMsg = args.join(' ');
         const script = document.createElement('script');
         script.type = 'module';
         script.src = assetsUrl + '/index-Da-JLo9O.js';
         script.onload = function() {
-            console.log('LR100: Main script loaded successfully');
-             a module
-            // Set a timer to check if models are loading properlyateElement('script');
-            setTimeout(() => {
-                if (window.scene) { assetsUrl + '/index-Da-JLo9O.js';
+            console.log('LR100: Main script loaded successfully');rMsg.match(/\/assets\/([^"]+\.gltf)/);
+            
+            // Set a timer to check if models are loading properly
+            setTimeout(() => {covery for failed model:', modelName);
+                if (window.scene) {
                     console.log('LR100: 3D scene initialized successfully');
                     
+                    // Proactively load critical models that might be needed
+                    const criticalModels = [
+                        '100-10-STAND.gltf', 
+                        '100-10-MOVING.gltf',
+                        '100-99-STAND.gltf', 
+                        '100-99-MOVING.gltf',assetsUrl + '/index-Da-JLo9O.js';
+                        '100-200-STAND.gltf', ript.onload = function() {
+                        '100-200-MOVING.gltf't loaded successfully');
+                    ];
+                    
+                    console.log('LR100: Preloading critical models');ut(() => {
+                    criticalModels.forEach(model => {
+                        window.lr100LoadModel(model);            console.log('LR100: 3D scene initialized successfully');
+                    });
+                    nitialize them
                     // Check if any model selection elements exist and initialize them
-                    const selects = ['coilerSelect', 'reelStandSelect', 'counterSelect', 'cutterSelect'];
-                    selects.forEach(selectId => {
-                        const select = document.getElementById(selectId);
-                        if (select) {);
-                            console.log(`LR100: Found ${selectId}, registering change handler`);
-                            select.addEventListener('change', function() {
-                                if (this.value) {t'];
-                                    window.lr100LoadModel(this.value, function(model) {ectId => {
-                                        console.log('LR100: Model loaded via select:', select.value);ect = document.getElementById(selectId);
-                                    });ect) {
-                                }   console.log(`LR100: Found ${selectId}, registering change handler`);
-                            });     select.addEventListener('change', function() {
-                        }               if (this.value) {
-                    });               window.lr100LoadModel(this.value, function(model) {
-                }                              console.log('LR100: Model loaded via select:', select.value);
-            }, 1000);
+                    const selects = ['coilerSelect', 'reelStandSelect', 'counterSelect', 'cutterSelect'];       selects.forEach(selectId => {
+                    selects.forEach(selectId => {electId);
+                        const select = document.getElementById(selectId);            if (select) {
+                        if (select) {                           console.log(`LR100: Found ${selectId}, registering change handler`);
+                            console.log(`LR100: Found ${selectId}, registering change handler`);                            select.addEventListener('change', function() {
+                            select.addEventListener('change', function() {        if (this.value) {
+                                if (this.value) {ow.lr100LoadModel(this.value, function(model) {
+                                    window.lr100LoadModel(this.value, function(model) {    console.log('LR100: Model loaded via select:', select.value);
+                                        console.log('LR100: Model loaded via select:', select.value);                                    });
+                                    });                                }
+                                }
+                            });                       }
+                        }                    });
+                    });
+                    
+                    // Fix for specific models that might be referenced differently
+                    window.originalLoadModel = window.loadModel;       script.onerror = function(error) {
+                    if (window.loadModel) { script:', error);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+add_action('plugins_loaded', 'lr100_3d_viewer_init');}    LR100_3D_Viewer::get_instance();function lr100_3d_viewer_init() {// Initialize the plugin}    }        return $output;HTML;</script>})();    });        document.body.appendChild(script);        };            container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';            console.error('LR100: Failed to load main script:', error);        script.onerror = function(error) {        };            }, 1000);                }                    console.error('LR100: Scene not initialized after timeout');                } else {                    }                        };                            window.lr100LoadModel(fileName);                            console.log('LR100: Intercepted loadModel call for:', fileName);                            const fileName = url.split('/').pop();                        window.loadModel = function(url) {            container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
         };
-        script.onerror = function(error) {
-            console.error('LR100: Failed to load main script:', error);              }
-            container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
-        };         }
-        document.body.appendChild(script);       }, 1000);
-    });;
-})();   script.onerror = function(error) {
-</script>    console.error('LR100: Failed to load main script:', error);
-HTML;nnerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
-           };
-        return $output;       document.body.appendChild(script);
-    }    });
-}
+        document.body.appendChild(script);
+    });
+})();
+</script>
+HTML;
 
-// Initialize the plugin
-function lr100_3d_viewer_init() {       
-    LR100_3D_Viewer::get_instance();
-
-
-add_action('plugins_loaded', 'lr100_3d_viewer_init');}    }
+        return $output;
+    }
 }
 
 // Initialize the plugin
