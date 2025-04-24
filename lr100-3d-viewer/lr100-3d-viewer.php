@@ -98,13 +98,17 @@ class LR100_3D_Viewer {
         const pluginUrl = "{$plugin_url}";
         const DEBUG = {$debug_mode};
         
+        // Helper to get asset URL
+        function getAssetUrl(fileName) {
+            if (!fileName) return '';
+            // Remove any path information, just get the filename
+            const baseName = fileName.split('/').pop();
+            return assetsUrl + '/' + baseName;
+        }
+        
         // Debug function
         function debug(message, ...args) {
-            if (DEBUG) {
-                console.log(`LR100 DEBUG: ${message}`, ...args);
-            } else {
-                console.log(`LR100: ${message}`, ...args);
-            }
+            console.log(`LR100: ${message}`, ...args);
         }
         
         debug('Initializing LR100 3D Viewer');
@@ -117,6 +121,272 @@ class LR100_3D_Viewer {
         cssLink.href = assetsUrl + "/index-Ds3WH6D6.css";
         document.head.appendChild(cssLink);
         debug('Added CSS link:', cssLink.href);
+        
+        // ----- THIS IS THE AGGRESSIVE PATCHING SECTION -----
+        
+        // 1. Override full file paths by filename
+        window.ASSET_FILES = {
+            '100-10-MOVING.gltf': assetsUrl + '/100-10-MOVING.gltf',
+            '100-10-STAND.gltf': assetsUrl + '/100-10-STAND.gltf',
+            '100-99-MOVING.gltf': assetsUrl + '/100-99-MOVING.gltf',
+            '100-99-STAND.gltf': assetsUrl + '/100-99-STAND.gltf',
+            '100-200-MOVING.gltf': assetsUrl + '/100-200-MOVING.gltf',
+            '100-200-STAND.gltf': assetsUrl + '/100-200-STAND.gltf',
+            '1410.gltf': assetsUrl + '/1410.gltf',
+            '1410C.gltf': assetsUrl + '/1410C.gltf',
+            '1410model.gltf': assetsUrl + '/1410model.gltf',
+            '284-SPOOL.gltf': assetsUrl + '/284-SPOOL.gltf',
+            'bench.gltf': assetsUrl + '/bench.gltf',
+            'LR100-284.gltf': assetsUrl + '/LR100-284.gltf',
+            'table.gltf': assetsUrl + '/table.gltf',
+            'toolbox.gltf': assetsUrl + '/toolbox.gltf',
+            'taymer_logo.png': assetsUrl + '/taymer_logo.png',
+            'taymer_small_logo.jpeg': assetsUrl + '/taymer_small_logo.jpeg',
+            'Rope002.png': assetsUrl + '/Rope002.png',
+            'Rope002_1K-JPG_Color.jpg': assetsUrl + '/Rope002_1K-JPG_Color.jpg',
+            'Rope002_1K-JPG_Displacement.jpg': assetsUrl + '/Rope002_1K-JPG_Displacement.jpg',
+            'Rope002_1K-JPG_Metalness.jpg': assetsUrl + '/Rope002_1K-JPG_Metalness.jpg',
+            'Rope002_1K-JPG_NormalDX.jpg': assetsUrl + '/Rope002_1K-JPG_NormalDX.jpg',
+            'Rope002_1K-JPG_NormalGL.jpg': assetsUrl + '/Rope002_1K-JPG_NormalGL.jpg',
+            'Rope002_1K-JPG_Roughness.jpg': assetsUrl + '/Rope002_1K-JPG_Roughness.jpg'
+        };
+        
+        // 2. Override fetch API to intercept ALL requests
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string') {
+                // Extract the filename from the URL
+                const urlParts = url.split('/');
+                const fileName = urlParts[urlParts.length - 1];
+                
+                // Check if this is one of our asset files
+                if (window.ASSET_FILES[fileName]) {
+                    debug('Fixing fetch URL for ' + fileName + ':', url, '->', window.ASSET_FILES[fileName]);
+                    return originalFetch(window.ASSET_FILES[fileName], options);
+                }
+                
+                // Handle specific patterns we've seen
+                if (url.includes('/length-measurement-configurator/assets/')) {
+                    const fileNameFromPath = url.split('/assets/').pop();
+                    const correctedUrl = assetsUrl + '/' + fileNameFromPath;
+                    debug('Fixing fetch URL with length-measurement pattern:', url, '->', correctedUrl);
+                    return originalFetch(correctedUrl, options);
+                }
+                
+                if (url.startsWith('/assets/') || url.startsWith('./assets/')) {
+                    const fileNameFromPath = url.split('/assets/').pop();
+                    const correctedUrl = assetsUrl + '/' + fileNameFromPath;
+                    debug('Fixing fetch URL with assets pattern:', url, '->', correctedUrl);
+                    return originalFetch(correctedUrl, options);
+                }
+            }
+            return originalFetch(url, options);
+        };
+        
+        // 3. Override ALL instance of loader.load functions once THREE is available
+        const patchLoaders = setInterval(() => {
+            if (window.THREE) {
+                clearInterval(patchLoaders);
+                debug('THREE.js detected, patching loaders');
+                
+                // Intercept GLTFLoader
+                if (THREE.GLTFLoader) {
+                    const originalGLTFLoader = THREE.GLTFLoader;
+                    THREE.GLTFLoader = function(...args) {
+                        const loader = new originalGLTFLoader(...args);
+                        const originalLoad = loader.load;
+                        
+                        loader.load = function(url, onLoad, onProgress, onError) {
+                            let newUrl = url;
+                            
+                            // Check if it's a string URL
+                            if (typeof url === 'string') {
+                                // Extract the filename
+                                const urlParts = url.split('/');
+                                const fileName = urlParts[urlParts.length - 1];
+                                
+                                // Check our mapping first
+                                if (window.ASSET_FILES[fileName]) {
+                                    newUrl = window.ASSET_FILES[fileName];
+                                    debug('Fixed GLTFLoader URL by filename:', fileName, newUrl);
+                                } 
+                                // Check path patterns
+                                else if (url.includes('/assets/')) {
+                                    const fileNameFromPath = url.split('/assets/').pop();
+                                    newUrl = assetsUrl + '/' + fileNameFromPath;
+                                    debug('Fixed GLTFLoader URL by path pattern:', url, '->', newUrl);
+                                }
+                            }
+                            
+                            debug('Loading model from:', newUrl);
+                            return originalLoad.call(loader, newUrl, onLoad, onProgress, function(error) {
+                                console.error('Error loading model:', newUrl, error);
+                                if (onError) onError(error);
+                            });
+                        };
+                        
+                        return loader;
+                    };
+                    
+                    debug('Patched GLTFLoader');
+                }
+                
+                // Intercept TextureLoader
+                if (THREE.TextureLoader) {
+                    const originalTextureLoader = THREE.TextureLoader;
+                    THREE.TextureLoader = function(...args) {
+                        const loader = new originalTextureLoader(...args);
+                        const originalLoad = loader.load;
+                        
+                        loader.load = function(url, onLoad, onProgress, onError) {
+                            let newUrl = url;
+                            
+                            // Check if it's a string URL
+                            if (typeof url === 'string') {
+                                // Extract the filename
+                                const urlParts = url.split('/');
+                                const fileName = urlParts[urlParts.length - 1];
+                                
+                                // Check our mapping first
+                                if (window.ASSET_FILES[fileName]) {
+                                    newUrl = window.ASSET_FILES[fileName];
+                                    debug('Fixed TextureLoader URL by filename:', fileName, newUrl);
+                                } 
+                                // Check path patterns
+                                else if (url.includes('/assets/')) {
+                                    const fileNameFromPath = url.split('/assets/').pop();
+                                    newUrl = assetsUrl + '/' + fileNameFromPath;
+                                    debug('Fixed TextureLoader URL by path pattern:', url, '->', newUrl);
+                                }
+                            }
+                            
+                            return originalLoad.call(loader, newUrl, onLoad, onProgress, onError);
+                        };
+                        
+                        return loader;
+                    };
+                    
+                    debug('Patched TextureLoader');
+                }
+            }
+        }, 100);
+        
+        // 4. Create a global hook for ANY method that loads assets
+        function patchAssetLoaderFunctions() {
+            debug('Setting up asset loader patches');
+            
+            // Fix loadCombo function
+            window.originalLoadCombo = window.loadCombo;
+            window.loadCombo = function(fileName, onLoad) {
+                if (!fileName) return;
+                debug('loadCombo called with:', fileName);
+                
+                // Always use the correct assets URL
+                const correctPath = getAssetUrl(fileName);
+                debug('Using path:', correctPath);
+                
+                if (window.loader && window.loader.load) {
+                    debug('Loading model via loader.load:', correctPath);
+                    window.loader.load(
+                        correctPath,
+                        function(gltf) {
+                            debug('Model loaded successfully:', fileName);
+                            if (onLoad) onLoad(gltf.scene);
+                        },
+                        function(progress) {
+                            // Optional progress
+                        },
+                        function(error) {
+                            console.error('Error loading model:', fileName, error);
+                        }
+                    );
+                } else {
+                    console.error('loader not available yet');
+                }
+            };
+            
+            // Fix loadSpoolFromMovingAssets function if it exists
+            if (window.loadSpoolFromMovingAssets) {
+                const originalLoadSpool = window.loadSpoolFromMovingAssets;
+                window.loadSpoolFromMovingAssets = function() {
+                    debug('Patched loadSpoolFromMovingAssets called');
+                    
+                    // The original function likely does: loader.load(\`./assets/284-SPOOL.gltf\`, ...)
+                    if (window.loader && window.loader.load) {
+                        const correctPath = getAssetUrl('284-SPOOL.gltf');
+                        debug('Loading spool with correct path:', correctPath);
+                        
+                        if (window.spoolModel) {
+                            window.disposeModel(window.spoolModel);
+                            window.spoolModel = null;
+                        }
+                        
+                        window.loader.load(
+                            correctPath,
+                            function(gltf) {
+                                debug('Spool model loaded successfully');
+                                window.spoolModel = gltf.scene;
+                                window.spoolModel.position.set(-0.55, 0.16, 0.035);
+                                window.spoolModel.scale.set(11, 11, 11);
+                                window.scene.add(window.spoolModel);
+                                if (window.createFloorCoil) {
+                                    window.createFloorCoil();
+                                }
+                            },
+                            undefined,
+                            function(error) {
+                                console.error('Error loading spool model:', error);
+                            }
+                        );
+                        return; // Skip original function
+                    }
+                    
+                    // If we can't patch it, call the original function
+                    originalLoadSpool();
+                };
+            }
+            
+            // This is a significant hack, but necessary to fix all loading issues:
+            // Monitor calls to loader.load and intercept them
+            const monitorInterval = setInterval(() => {
+                if (window.loader && window.loader.load && !window.loader.__patched) {
+                    const originalLoaderLoad = window.loader.load;
+                    window.loader.__patched = true;
+                    
+                    window.loader.load = function(url, onLoad, onProgress, onError) {
+                        let newUrl = url;
+                        
+                        // Check if it's a string URL
+                        if (typeof url === 'string') {
+                            // Extract the filename
+                            const urlParts = url.split('/');
+                            const fileName = urlParts[urlParts.length - 1];
+                            
+                            // Check our mapping first
+                            if (window.ASSET_FILES[fileName]) {
+                                newUrl = window.ASSET_FILES[fileName];
+                                debug('Fixed loader.load URL by filename:', fileName, newUrl);
+                            } 
+                            // Check path patterns
+                            else if (url.includes('/assets/')) {
+                                const fileNameFromPath = url.split('/assets/').pop();
+                                newUrl = assetsUrl + '/' + fileNameFromPath;
+                                debug('Fixed loader.load URL by path pattern:', url, '->', newUrl);
+                            }
+                        }
+                        
+                        debug('Loading with patched loader:', newUrl);
+                        return originalLoaderLoad.call(window.loader, newUrl, onLoad, onProgress, function(error) {
+                            console.error('Error in patched loader.load:', newUrl, error);
+                            if (onError) onError(error);
+                        });
+                    };
+                    
+                    debug('Patched window.loader.load method');
+                    clearInterval(monitorInterval);
+                }
+            }, 100);
+        }
         
         // Create HTML structure
         container.innerHTML = `
@@ -174,145 +444,32 @@ HTML;
     <canvas id="lr100-canvas"></canvas>
 </div>`;
 
-        // The most direct way to fix the model loading issues:
-        // 1. Replace the loadCombo function immediately
-        window.loadCombo = function(fileName, onLoad) {
-            if (!fileName) return;
-            console.log('LR100: loadCombo called with:', fileName);
-            
-            // Always use the correct assets URL
-            const correctPath = assetsUrl + '/' + fileName;
-            console.log('LR100: Using correct path:', correctPath);
-            
-            // Use THREE.GLTFLoader to load the model
-            if (!window.loader) {
-                window.loader = new THREE.GLTFLoader();
-            }
-            
-            window.loader.load(
-                correctPath,
-                function(gltf) {
-                    console.log('LR100: Model loaded successfully:', fileName);
-                    const model = gltf.scene;
-                    model.rotation.y = Math.PI;
-                    model.position.x = 0.57;
-                    model.position.y = 0.225;
-                    window.scene.add(model);
-                    if (onLoad) onLoad(model);
-                },
-                undefined,
-                function(error) {
-                    console.error('LR100: Error loading model:', fileName, error);
+        // Call our patching functions
+        patchAssetLoaderFunctions();
+        
+        // Fix Worker loading
+        const originalWorker = window.Worker;
+        window.Worker = function(url, options) {
+            if (url instanceof URL) {
+                const urlString = url.toString();
+                if (urlString.includes('physicsWorker')) {
+                    const workerUrl = assetsUrl + "/physicsWorker-iiFlsN1r.js";
+                    debug('Fixed Worker URL:', urlString, '->', workerUrl);
+                    return new originalWorker(workerUrl, options);
                 }
-            );
+            }
+            return new originalWorker(url, options);
         };
         
-        // 2. Fix all URLs in the loadCombo function in your codebase
-        const fixLoadComboFunc = setInterval(() => {
-            // Check if the original loadCombo was loaded from your script
-            if (typeof window.loadCombo === 'function' && window.loadCombo.toString().includes('loader.load')) {
-                clearInterval(fixLoadComboFunc);
-                console.log('LR100: Found and fixing loadCombo function');
-                
-                // Override loadCombo again to ensure our version is used
-                const originalLoadCombo = window.loadCombo;
-                window.loadCombo = function(fileName, onLoad) {
-                    if (!fileName) return;
-                    console.log('LR100: Using fixed loadCombo for:', fileName);
-                    
-                    // Always use the correct assets URL
-                    const correctPath = assetsUrl + '/' + fileName;
-                    
-                    if (window.loader && window.loader.load) {
-                        console.log('LR100: Loading model from:', correctPath);
-                        window.loader.load(
-                            correctPath,
-                            function(gltf) {
-                                console.log('LR100: Model loaded successfully:', fileName);
-                                const model = gltf.scene;
-                                if (onLoad) onLoad(model);
-                            },
-                            undefined,
-                            function(error) {
-                                console.error('LR100: Error loading model:', fileName, error);
-                            }
-                        );
-                    } else {
-                        console.error('LR100: loader not available yet');
-                    }
-                };
-            }
-        }, 200);
-        
-        // 3. Also fix the URLs in any direct GLTFLoader calls
-        const fixGltfLoaderCalls = setInterval(() => {
-            if (window.THREE && window.THREE.GLTFLoader) {
-                clearInterval(fixGltfLoaderCalls);
-                
-                // Create a wrapper around the GLTFLoader
-                const origGLTFLoader = window.THREE.GLTFLoader;
-                window.THREE.GLTFLoader = function(...args) {
-                    const loader = new origGLTFLoader(...args);
-                    const origLoad = loader.load;
-                    
-                    loader.load = function(url, onLoad, onProgress, onError) {
-                        let newUrl = url;
-                        
-                        // Handle common paths we've seen in error messages
-                        if (typeof url === 'string') {
-                            // Match for a specific pattern we saw in your errors
-                            if (url.includes('/length-measurement-configurator/assets/')) {
-                                const fileName = url.split('/assets/').pop();
-                                newUrl = assetsUrl + '/' + fileName;
-                                console.log('LR100: Fixed length-measurement-configurator path:', url, '->', newUrl);
-                            }
-                            // Match common GLTF model patterns
-                            else if (url.endsWith('.gltf')) {
-                                const fileName = url.split('/').pop();
-                                newUrl = assetsUrl + '/' + fileName;
-                                console.log('LR100: Fixed GLTF model path:', url, '->', newUrl);
-                            }
-                        }
-                        
-                        return origLoad.call(loader, newUrl, onLoad, onProgress, onError);
-                    };
-                    
-                    return loader;
-                };
-            }
-        }, 200);
-
-        // 4. Fix the fetch function for network requests
-        const originalFetch = window.fetch;
-        window.fetch = function(url, options) {
-            if (typeof url === 'string') {
-                let newUrl = url;
-                let modified = false;
-                
-                // This is the specific URL pattern from your error message
-                if (url.includes('/length-measurement-configurator/assets/')) {
-                    const assetName = url.split('/assets/').pop();
-                    newUrl = assetsUrl + '/' + assetName;
-                    modified = true;
-                    console.log('LR100: Fixed fetch URL:', url, '->', newUrl);
-                }
-                
-                if (modified) {
-                    return originalFetch(newUrl, options);
-                }
-            }
-            return originalFetch(url, options);
-        };
-        
-        // Load the main JS as a module
+        // Load the main script
         const script = document.createElement('script');
         script.type = 'module';
         script.src = assetsUrl + '/index-Da-JLo9O.js';
         script.onload = function() {
-            console.log('LR100: Main script loaded successfully');
+            debug('Main script loaded successfully');
         };
         script.onerror = function(error) {
-            console.error('LR100: Failed to load main script:', error);
+            console.error('Failed to load main script:', error);
             container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
         };
         document.body.appendChild(script);
