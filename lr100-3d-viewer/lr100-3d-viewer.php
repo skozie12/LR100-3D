@@ -47,154 +47,164 @@ class LR100_3D_Viewer {
             'include_controls' => 'true'
         ), $atts);
         
-        // Get assets URLs
-        $plugin_url = plugin_dir_url(__FILE__);
-        $assets_url = $plugin_url . 'dist/assets';
+        // Get assets URLs - ensure they're properly URL-encoded for direct inclusion
+        $plugin_url = esc_url(plugin_dir_url(__FILE__));
+        $assets_url = esc_url($plugin_url . 'dist/assets');
         
         // Create container with unique ID
         $container_id = 'lr100-container-' . uniqid();
+        
+        // Output container
         $output = '<div id="' . $container_id . '" class="lr100-container" style="width: ' . esc_attr($atts['width']) . '; height: ' . esc_attr($atts['height']) . ';">';
-        
-        // Add an initial loading message
         $output .= '<div style="display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; background-color: #f0f0f0;">';
-        $output .= '<p>Loading 3D Viewer...</p>';
+        $output .= '<p>Loading LR100 3D Viewer...</p>';
+        $output .= '</div>';
         $output .= '</div>';
         
-        $output .= '</div>';
+        // Create a separate script tag to avoid WordPress messing with your code
+        $output .= <<<SCRIPT
+<script>
+(function() {
+    document.addEventListener("DOMContentLoaded", function() {
+        const container = document.getElementById("{$container_id}");
+        const assetsUrl = "{$assets_url}";
+        const pluginUrl = "{$plugin_url}";
         
-        // Add inline script to load everything correctly
-        $output .= '<script>';
-        $output .= 'document.addEventListener("DOMContentLoaded", function() {';
-        $output .= '    const container = document.getElementById("' . $container_id . '");';
-        $output .= '    const assetsUrl = "' . esc_js($assets_url) . '";';
-        $output .= '    const pluginUrl = "' . esc_js($plugin_url) . '";';
+        // Add CSS file
+        const cssLink = document.createElement("link");
+        cssLink.rel = "stylesheet";
+        cssLink.href = assetsUrl + "/index-Ds3WH6D6.css";
+        document.head.appendChild(cssLink);
         
-        // First, load THREE.js
-        $output .= '    // Create container elements';
-        $output .= '    container.innerHTML = `';
+        // Create HTML structure
+        container.innerHTML = `
+SCRIPT;
+
+        // Add controls if requested
         if ($atts['include_controls'] === 'true') {
-            $output .= '<div id="top-bar">
-                            <div class="panel-title">LR100 Configuration</div>
-                            <label for="coilerSelect">Coiler:</label>
-                            <select id="coilerSelect">
-                                <option value="">-- Select Coiler --</option>
-                                <option value="100-10.gltf" id="100-10">Collapsible 16″ I.D. Coiler</option>
-                                <option value="100-99.gltf" id="100-99">Collapsible 12″ I.D. Coiler</option>
-                                <option value="100-200.gltf" id="100-200">Collapsible 8″ I.D. Coiler</option>
-                            </select>
-                            <label for="reelStandSelect">Reel Stand:</label>
-                            <select id="reelStandSelect">
-                                <option value="">-- Select Reel Stand --</option>
-                                <option value="LR100-284.gltf" id="100-284">Wind-off Reel Stand</option>
-                            </select>
-                            <label for="counterSelect">Counter:</label>
-                            <select id="counterSelect">
-                                <option value="">-- Select Counter --</option>
-                                <option value="1410.gltf" id="1410">Footage Counter</option>
-                                <option value="1410.gltf" id="1420">Metric Counter</option>
-                                <option value="1410.gltf" id="1410UR">Footage Counter with UR Wheels</option>
-                                <option value="1410.gltf" id="1420UR">Metric Counter with UR Wheels</option>
-                            </select>
-                            <label for="cutterSelect">Cutter:</label>
-                            <select id="cutterSelect" disabled>
-                                <option value="">-- Select Cutter --</option>
-                                <option value="1410C.gltf" id="100-C">Cutting Blade</option>
-                            </select>
-                            <button class="add-to-cart" id="addBtn">Add to cart</button>
-                            <div id="price-display"></div>
-                        </div>
-                        <div class="footer-text footer-left">
-                            Note: LR100-284 does not include a spool, colours are subject to change
-                        </div>
-                        <div class="footer-text footer-right">
-                            © 2025 Taymer International, Inc. All rights reserved.
-                        </div>';
+            $output .= <<<HTML
+<div id="top-bar">
+    <div class="panel-title">LR100 Configuration</div>
+    <label for="coilerSelect">Coiler:</label>
+    <select id="coilerSelect">
+        <option value="">-- Select Coiler --</option>
+        <option value="100-10.gltf" id="100-10">Collapsible 16″ I.D. Coiler</option>
+        <option value="100-99.gltf" id="100-99">Collapsible 12″ I.D. Coiler</option>
+        <option value="100-200.gltf" id="100-200">Collapsible 8″ I.D. Coiler</option>
+    </select>
+    <label for="reelStandSelect">Reel Stand:</label>
+    <select id="reelStandSelect">
+        <option value="">-- Select Reel Stand --</option>
+        <option value="LR100-284.gltf" id="100-284">Wind-off Reel Stand</option>
+    </select>
+    <label for="counterSelect">Counter:</label>
+    <select id="counterSelect">
+        <option value="">-- Select Counter --</option>
+        <option value="1410.gltf" id="1410">Footage Counter</option>
+        <option value="1410.gltf" id="1420">Metric Counter</option>
+        <option value="1410.gltf" id="1410UR">Footage Counter with UR Wheels</option>
+        <option value="1410.gltf" id="1420UR">Metric Counter with UR Wheels</option>
+    </select>
+    <label for="cutterSelect">Cutter:</label>
+    <select id="cutterSelect" disabled>
+        <option value="">-- Select Cutter --</option>
+        <option value="1410C.gltf" id="100-C">Cutting Blade</option>
+    </select>
+    <button class="add-to-cart" id="addBtn">Add to cart</button>
+    <div id="price-display"></div>
+</div>
+<div class="footer-text footer-left">
+    Note: LR100-284 does not include a spool, colours are subject to change
+</div>
+<div class="footer-text footer-right">
+    © 2025 Taymer International, Inc. All rights reserved.
+</div>
+HTML;
         }
         
-        $output .= '<div id="top-overlay" style="position: fixed; z-index: 10000; top: 0; left: 0; width: 100%; pointer-events: none;"></div>
-                    <div id="canvas-container">
-                        <div id="canvas-overlay">
-                            <p>Click and Drag to Rotate</p>
-                        </div>
-                        <canvas id="lr100-canvas"></canvas>
-                    </div>`;';
+        // Add canvas and continuation of JavaScript
+        $output .= <<<HTML
+<div id="top-overlay" style="position: fixed; z-index: 10000; top: 0; left: 0; width: 100%; pointer-events: none;"></div>
+<div id="canvas-container">
+    <div id="canvas-overlay">
+        <p>Click and Drag to Rotate</p>
+    </div>
+    <canvas id="lr100-canvas"></canvas>
+</div>`;
+
+        // Fix asset paths by intercepting network requests
         
-        // Load the CSS file directly
-        $output .= '    const cssFile = document.createElement("link");';
-        $output .= '    cssFile.rel = "stylesheet";';
-        $output .= '    cssFile.href = assetsUrl + "/index-Ds3WH6D6.css";';
-        $output .= '    document.head.appendChild(cssFile);';
+        // 1. Fix fetch requests to /assets/
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string' && url.startsWith('/assets/')) {
+                console.log('LR100: Fixing fetch path', url, '->', assetsUrl + url.substring(7));
+                return originalFetch(assetsUrl + url.substring(7), options);
+            }
+            return originalFetch(url, options);
+        };
         
-        // Patch module script loader
-        $output .= '    // Function to patch module paths';
-        $output .= '    function monkeyPatchModuleLoader() {';
-        $output .= '        // Store original fetch';
-        $output .= '        const originalFetch = window.fetch;';
-        $output .= '        window.fetch = function(url, options) {';
-        $output .= '            if (typeof url === "string" && url.startsWith("/assets/")) {';
-        $output .= '                console.log("Patching fetch URL:", url, "->", assetsUrl + url.substring(7));';
-        $output .= '                return originalFetch(assetsUrl + url.substring(7), options);';
-        $output .= '            }';
-        $output .= '            return originalFetch(url, options);';
-        $output .= '        };';
+        // 2. Fix Web Worker loading
+        const originalWorker = window.Worker;
+        window.Worker = function(url, options) {
+            if (url instanceof URL) {
+                const urlString = url.toString();
+                if (urlString.includes('physicsWorker')) {
+                    const workerUrl = assetsUrl + "/physicsWorker-iiFlsN1r.js";
+                    console.log('LR100: Fixing Worker path', urlString, '->', workerUrl);
+                    return new originalWorker(workerUrl, options);
+                }
+            }
+            return new originalWorker(url, options);
+        };
         
-        // Patch Worker constructor to fix Web Worker loading
-        $output .= '        const originalWorker = window.Worker;';
-        $output .= '        window.Worker = function(url, options) {';
-        $output .= '            if (url instanceof URL) {';
-        $output .= '                const urlString = url.toString();';
-        $output .= '                if (urlString.includes("physicsWorker")) {';
-        $output .= '                    console.log("Patching Worker URL:", urlString, "->", assetsUrl + "/physicsWorker-iiFlsN1r.js");';
-        $output .= '                    return new originalWorker(assetsUrl + "/physicsWorker-iiFlsN1r.js", options);';
-        $output .= '                }';
-        $output .= '            }';
-        $output .= '            return new originalWorker(url, options);';
-        $output .= '        };';
+        // 3. Wait for THREE.js to load, then patch asset loaders
+        const patchThreeInterval = setInterval(() => {
+            if (window.THREE) {
+                clearInterval(patchThreeInterval);
+                console.log('LR100: THREE.js detected, patching loaders');
+                
+                // Fix TextureLoader
+                if (THREE.TextureLoader) {
+                    const originalTextureLoad = THREE.TextureLoader.prototype.load;
+                    THREE.TextureLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+                        if (typeof url === 'string' && url.startsWith('./assets/')) {
+                            const newUrl = assetsUrl + '/' + url.substring(9);
+                            console.log('LR100: Fixing texture path', url, '->', newUrl);
+                            return originalTextureLoad.call(this, newUrl, onLoad, onProgress, onError);
+                        }
+                        return originalTextureLoad.call(this, url, onLoad, onProgress, onError);
+                    };
+                }
+                
+                // Fix GLTFLoader
+                if (THREE.GLTFLoader) {
+                    const originalGLTFLoad = THREE.GLTFLoader.prototype.load;
+                    THREE.GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+                        if (typeof url === 'string' && url.startsWith('./assets/')) {
+                            const newUrl = assetsUrl + '/' + url.substring(9);
+                            console.log('LR100: Fixing GLTF path', url, '->', newUrl);
+                            return originalGLTFLoad.call(this, newUrl, onLoad, onProgress, onError);
+                        }
+                        return originalGLTFLoad.call(this, url, onLoad, onProgress, onError);
+                    };
+                }
+            }
+        }, 100);
         
-        // Patch TextureLoader and GLTFLoader to fix asset paths
-        $output .= '        // Wait for THREE to be available, then patch loaders';
-        $output .= '        const checkForThree = setInterval(() => {';
-        $output .= '            if (window.THREE) {';
-        $output .= '                clearInterval(checkForThree);';
-        $output .= '                console.log("THREE.js detected, patching loaders");';
-        
-        // Patch TextureLoader
-        $output .= '                if (THREE.TextureLoader) {';
-        $output .= '                    const originalTextureLoad = THREE.TextureLoader.prototype.load;';
-        $output .= '                    THREE.TextureLoader.prototype.load = function(url, onLoad, onProgress, onError) {';
-        $output .= '                        if (typeof url === "string" && url.startsWith("./assets/")) {';
-        $output .= '                            console.log("Patching texture URL:", url, "->", assetsUrl + "/" + url.substring(9));';
-        $output .= '                            return originalTextureLoad.call(this, assetsUrl + "/" + url.substring(9), onLoad, onProgress, onError);';
-        $output .= '                        }';
-        $output .= '                        return originalTextureLoad.call(this, url, onLoad, onProgress, onError);';
-        $output .= '                    };';
-        $output .= '                }';
-        
-        // Patch GLTFLoader
-        $output .= '                if (THREE.GLTFLoader) {';
-        $output .= '                    const originalGLTFLoad = THREE.GLTFLoader.prototype.load;';
-        $output .= '                    THREE.GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {';
-        $output .= '                        if (typeof url === "string" && url.startsWith("./assets/")) {';
-        $output .= '                            console.log("Patching GLTF URL:", url, "->", assetsUrl + "/" + url.substring(9));';
-        $output .= '                            return originalGLTFLoad.call(this, assetsUrl + "/" + url.substring(9), onLoad, onProgress, onError);';
-        $output .= '                        }';
-        $output .= '                        return originalGLTFLoad.call(this, url, onLoad, onProgress, onError);';
-        $output .= '                    };';
-        $output .= '                }';
-        $output .= '            }';
-        $output .= '        }, 100);';
-        $output .= '    }';
-        
-        // Apply patches and load the script as a module
-        $output .= '    monkeyPatchModuleLoader();';
-        
-        // Let's explicitly add a script tag with type="module" to properly load the ES6 module
-        $output .= '    const scriptModule = document.createElement("script");';
-        $output .= '    scriptModule.type = "module";';
-        $output .= '    scriptModule.src = assetsUrl + "/index-Da-JLo9O.js";';
-        $output .= '    document.body.appendChild(scriptModule);';
-        $output .= '});';
-        $output .= '</script>';
+        // Load the main JS as a module
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = assetsUrl + '/index-Da-JLo9O.js';
+        script.onerror = function(error) {
+            console.error('LR100: Error loading main script:', error);
+            container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
+        };
+        document.body.appendChild(script);
+    });
+})();
+</script>
+HTML;
         
         return $output;
     }
