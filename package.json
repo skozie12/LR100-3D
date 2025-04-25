@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build --emptyOutDir",
-    "preview": "vite preview"
+    "build:wp": "vite build --emptyOutDir && node scripts/create-zip.js",
+    "preview": "vite preview",
+    "deploy": "npm run build && node scripts/deploy.js"
   },
   "dependencies": {
     "ammo.js": "^0.0.10",

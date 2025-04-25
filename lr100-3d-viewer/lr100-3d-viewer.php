@@ -132,6 +132,10 @@ HTML;
     <canvas id="lr100-canvas"></canvas>
 </div>`;
 
+        // Set global asset path variable
+        window.LR100_ASSET_PATH = assetsUrl + '/';
+        console.log('LR100: Setting global asset path:', window.LR100_ASSET_PATH);
+
         // Fix all asset paths by intercepting network requests
         
         // 1. Fix fetch requests to various patterns
@@ -156,6 +160,14 @@ HTML;
                     console.log('LR100: Fixing fetch relative path', url, '->', assetsUrl + url.substring(8));
                     return originalFetch(assetsUrl + url.substring(8), options);
                 }
+
+                // Fix any asset file with gltf, jpg, png extensions not already caught
+                if ((url.includes('.gltf') || url.includes('.jpg') || url.includes('.png')) && 
+                    !url.includes(assetsUrl)) {
+                    const fileName = url.split('/').pop();
+                    console.log('LR100: Fixing asset path by extension', url, '->', assetsUrl + '/' + fileName);
+                    return originalFetch(assetsUrl + '/' + fileName, options);
+                }
                 
                 // Fix other hardcoded paths that end with model filenames
                 const modelFiles = [
@@ -163,7 +175,8 @@ HTML;
                     '100-99-MOVING.gltf', '100-99-STAND.gltf',
                     '100-200-MOVING.gltf', '100-200-STAND.gltf',
                     '1410.gltf', '1410C.gltf', '1410model.gltf',
-                    '284-SPOOL.gltf', 'LR100-284.gltf'
+                    '284-SPOOL.gltf', 'LR100-284.gltf',
+                    'taymer_logo.png'
                 ];
                 
                 for (const file of modelFiles) {
@@ -213,6 +226,31 @@ HTML;
             if (url instanceof URL) {
                 const urlString = url.toString();
                 if (urlString.includes('physicsWorker')) {
+                    // Try to find the correct worker file
+                    const workerFiles = [
+                        "physicsWorker-iiFlsN1r.js",  // Try the known filename first
+                        "physicsWorker.js"            // Try the original name if the hashed version doesn't exist
+                    ];
+                    
+                    // Choose the first worker file that exists
+                    const checkWorkerFile = async () => {
+                        for (const workerFile of workerFiles) {
+                            try {
+                                const response = await fetch(assetsUrl + '/' + workerFile, { method: 'HEAD' });
+                                if (response.ok) {
+                                    const workerUrl = assetsUrl + '/' + workerFile;
+                                    console.log('LR100: Fixing Worker path', urlString, '->', workerUrl);
+                                    return new originalWorker(workerUrl, options);
+                                }
+                            } catch (e) {
+                                console.warn('LR100: Worker file not found:', workerFile);
+                            }
+                        }
+                        // If no worker file is found, use the original URL
+                        return new originalWorker(url, options);
+                    };
+                    
+                    // Since we can't use async in the constructor, we need to check synchronously
                     const workerUrl = assetsUrl + "/physicsWorker-iiFlsN1r.js";
                     console.log('LR100: Fixing Worker path', urlString, '->', workerUrl);
                     return new originalWorker(workerUrl, options);
@@ -220,7 +258,7 @@ HTML;
             }
             return new originalWorker(url, options);
         };
-        
+
         // 4. Wait for THREE.js to load, then patch asset loaders
         const waitForMainJs = setInterval(() => {
             // Check if main script has initialized key functions
@@ -300,20 +338,143 @@ HTML;
             }
         };
         
-        // Load the main JS as a module
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = assetsUrl + '/index-Da-JLo9O.js';
-        script.onload = function() {
-            console.log('LR100: Main script loaded, checking for functions to override');
-            setTimeout(window.fixModelPaths, 500);
-            setTimeout(window.fixModelPaths, 1000);
-        };
-        script.onerror = function(error) {
-            console.error('LR100: Error loading main script:', error);
-            container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check the console for details.</div>';
-        };
-        document.body.appendChild(script);
+        // Function to try loading different script files
+        function loadScript(urls, index = 0) {
+            if (index >= urls.length) {
+                console.error('LR100: Failed to load any script version');
+                container.innerHTML = '<div style="color: red; padding: 20px;">Error loading 3D viewer. Please check console for details.</div>';
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = urls[index];
+            script.onload = function() {
+                console.log('LR100: Successfully loaded script:', urls[index]);
+                
+                // When the script loads successfully, add a monkey patch for the loadCombo function
+                // This is needed to override the loadCombo function in the compiled JS which might 
+                // be using hardcoded paths
+                setTimeout(() => {
+                    if (window.loadCombo) {
+                        console.log('LR100: Monkey patching loadCombo function');
+                        const originalLoadCombo = window.loadCombo;
+                        window.loadCombo = function(fileName, onLoad) {
+                            if (!fileName) return;
+                            
+                            // Always use the asset URL from the global variable
+                            const assetUrl = window.LR100_ASSET_PATH || assetsUrl + '/';
+                            const correctPath = assetUrl + fileName;
+                            console.log('LR100: Fixed loadCombo path', fileName, '->', correctPath);
+                            
+                            // This is using the loader object defined in the Three.js app
+                            if (window.loader && window.loader.load) {
+                                window.loader.load(
+                                    correctPath,
+                                    function(gltf) {
+                                        console.log('LR100: Successfully loaded model:', fileName);
+                                        if (onLoad) onLoad(gltf.scene);
+                                    },
+                                    function(xhr) {
+                                        // Loading progress callback
+                                        if (xhr.lengthComputable) {
+                                            const percent = (xhr.loaded / xhr.total) * 100;
+                                            console.log('LR100: Model loading: ' + percent.toFixed(2) + '%');
+                                        }
+                                    },
+                                    function(error) {
+                                        console.error('LR100: Error loading model:', fileName, error);
+                                        // Try a fallback approach - use fetch first to see if the file exists at a different path
+                                        fetch(assetsUrl + '/' + fileName, { method: 'HEAD' })
+                                            .then(response => {
+                                                if (response.ok) {
+                                                    console.log('LR100: Found model at alternate path:', assetsUrl + '/' + fileName);
+                                                    window.loader.load(
+                                                        assetsUrl + '/' + fileName,
+                                                        function(gltf) {
+                                                            console.log('LR100: Successfully loaded model from alternate path:', fileName);
+                                                            if (onLoad) onLoad(gltf.scene);
+                                                        },
+                                                        undefined,
+                                                        function(error) {
+                                                            console.error('LR100: Error loading model from alternate path:', fileName, error);
+                                                        }
+                                                    );
+                                                }
+                                            })
+                                            .catch(() => {
+                                                console.error('LR100: Model not found at any location:', fileName);
+                                            });
+                                    }
+                                );
+                            } else {
+                                console.error('LR100: loader not available yet');
+                            }
+                        };
+                    }
+                    
+                    // Also patch the THREE.TextureLoader prototype if available
+                    if (window.THREE && window.THREE.TextureLoader) {
+                        const originalTextureLoad = window.THREE.TextureLoader.prototype.load;
+                        window.THREE.TextureLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+                            if (typeof url === 'string') {
+                                // Fix hardcoded paths to length-measurement-configurator/assets/
+                                if (url.includes('/length-measurement-configurator/assets/')) {
+                                    const assetName = url.split('/assets/').pop();
+                                    const newUrl = assetsUrl + '/' + assetName;
+                                    console.log('LR100: Fixing texture path', url, '->', newUrl);
+                                    return originalTextureLoad.call(this, newUrl, onLoad, onProgress, onError);
+                                }
+                                // Also fix any absolute paths that start with /assets/
+                                if (url.startsWith('/assets/')) {
+                                    const newUrl = assetsUrl + url.substring(7);
+                                    console.log('LR100: Fixing absolute texture path', url, '->', newUrl);
+                                    return originalTextureLoad.call(this, newUrl, onLoad, onProgress, onError);
+                                }
+                                // Fix relative paths starting with ./assets/
+                                if (url.startsWith('./assets/')) {
+                                    const newUrl = assetsUrl + '/' + url.substring(9);
+                                    console.log('LR100: Fixing relative texture path', url, '->', newUrl);
+                                    return originalTextureLoad.call(this, newUrl, onLoad, onProgress, onError);
+                                }
+                            }
+                            return originalTextureLoad.call(this, url, onLoad, onProgress, onError);
+                        };
+                    }
+                    
+                    // Patch GLTFLoader if available
+                    if (window.THREE && window.THREE.GLTFLoader) {
+                        const originalGltfLoad = window.THREE.GLTFLoader.prototype.load;
+                        window.THREE.GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+                            if (typeof url === 'string') {
+                                // Fix hardcoded paths to length-measurement-configurator/assets/
+                                if (url.includes('/length-measurement-configurator/assets/')) {
+                                    const assetName = url.split('/assets/').pop();
+                                    const newUrl = assetsUrl + '/' + assetName;
+                                    console.log('LR100: Fixing GLTF path', url, '->', newUrl);
+                                    return originalGltfLoad.call(this, newUrl, onLoad, onProgress, onError);
+                                }
+                            }
+                            return originalGltfLoad.call(this, url, onLoad, onProgress, onError);
+                        };
+                    }
+                }, 200);
+            };
+            script.onerror = function(error) {
+                console.error('LR100: Failed to load script:', urls[index]);
+                // Try the next script in the array
+                loadScript(urls, index + 1);
+            };
+            document.body.appendChild(script);
+        }
+
+        // Try to load different versions of the main script
+        loadScript([
+            assetsUrl + '/main.js',                  // Use the new non-hashed name from our build config
+            pluginUrl + 'dist/main.js',              // Try alternative path
+            assetsUrl + '/index.js',                 // Fallbacks
+            assetsUrl + '/index-Da-JLo9O.js'         // Legacy name
+        ]);
     });
 })();
 </script>

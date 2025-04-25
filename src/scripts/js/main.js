@@ -1,5 +1,130 @@
+// Add this at the beginning of the file, before any imports
+console.log("LR100-3D: Starting asset loading fix");
+
+// PRODUCTION PATH - this is the ONLY path that should be used on taymer.com
+const PRODUCTION_PATH = '/wp-content/plugins/lr100-3d-viewer/dist/assets/';
+const BAD_PATH_PATTERN = '/length-measurement-configurator/assets/';
+
+// Asset path handling
+function getAssetPath() {
+  // Check for global variable from WordPress
+  if (window.LR100_ASSET_PATH) {
+    console.log("LR100-3D: Using configured asset path:", window.LR100_ASSET_PATH);
+    return window.LR100_ASSET_PATH;
+  }
+  
+  // If on taymer.com, ALWAYS use the production path
+  if (window.location.hostname.includes('taymer.com')) {
+    console.log("LR100-3D: Using fixed production path:", PRODUCTION_PATH);
+    return PRODUCTION_PATH;
+  }
+  
+  // For local development
+  const isBuilt = document.querySelector('script[src*="index-"]') !== null;
+  const path = isBuilt ? './assets/' : './src/assets/';
+  console.log("LR100-3D: Using development path:", path);
+  return path;
+}
+
+// Set up the asset path
+const ASSET_PATH = getAssetPath();
+console.log("LR100-3D: Asset path set to:", ASSET_PATH);
+
+// Utility to correct any asset URL
+function correctAssetUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  
+  // Always use the correct path for taymer.com
+  if (window.location.hostname.includes('taymer.com')) {
+    // Handle the problematic pattern directly
+    if (url.includes(BAD_PATH_PATTERN)) {
+      const filename = url.split('/').pop();
+      const newUrl = PRODUCTION_PATH + filename;
+      console.log(`LR100-3D: Fixing bad URL: ${url} -> ${newUrl}`);
+      return newUrl;
+    }
+    
+    // If URL doesn't include our production path but is an asset file
+    if (!url.includes(PRODUCTION_PATH) && 
+        (url.endsWith('.gltf') || url.endsWith('.jpg') || url.endsWith('.png'))) {
+      const filename = url.split('/').pop();
+      const newUrl = PRODUCTION_PATH + filename;
+      console.log(`LR100-3D: Correcting asset URL: ${url} -> ${newUrl}`);
+      return newUrl;
+    }
+  }
+  
+  return url;
+}
+
+// Override fetch to fix all network requests
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+  const correctedUrl = correctAssetUrl(url);
+  return originalFetch(correctedUrl, options);
+};
+
+// Deep XMLHttpRequest patch - some THREE.js loaders use this under the hood
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...args) {
+  const correctedUrl = correctAssetUrl(url);
+  return originalOpen.call(this, method, correctedUrl, ...args);
+};
+
+// Import THREE.js first so we can patch its loaders
 import * as THREE from 'three';
+
+// Fix THREE.js TextureLoader
+if (THREE.TextureLoader) {
+  const originalLoad = THREE.TextureLoader.prototype.load;
+  THREE.TextureLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+    const correctedUrl = correctAssetUrl(url);
+    return originalLoad.call(this, correctedUrl, onLoad, onProgress, onError);
+  };
+  console.log("LR100-3D: Patched THREE.TextureLoader");
+}
+
+// Import GLTFLoader next so we can patch it immediately
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+// Patch GLTFLoader - critical for model loading!
+const originalGltfLoad = GLTFLoader.prototype.load;
+GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {
+  const correctedUrl = correctAssetUrl(url);
+  console.log(`LR100-3D: GLTFLoader loading from ${correctedUrl}`);
+  return originalGltfLoad.call(this, correctedUrl, onLoad, onProgress, onError);
+};
+console.log("LR100-3D: Patched GLTFLoader");
+
+// Fix loadCombo function to ensure it always uses the correct path
+function loadCombo(fileName, onLoad) {
+  if (!fileName) return;
+  console.log(`LR100-3D: loadCombo called with ${fileName}`);
+  
+  // Always use the full corrected path
+  const fullPath = ASSET_PATH + fileName;
+  console.log(`LR100-3D: Loading model from ${fullPath}`);
+  
+  loader.load(
+    fullPath,
+    (gltf) => {
+      console.log(`LR100-3D: Successfully loaded ${fileName}`);
+      const model = gltf.scene;
+      model.rotation.y = Math.PI;
+      model.position.x = 0.57;
+      model.position.y = 0.225;
+      scene.add(model);
+      if (onLoad) onLoad(model);
+    },
+    (xhr) => {
+      console.log(`LR100-3D: ${fileName} loading: ${(xhr.loaded / xhr.total) * 100}%`);
+    },
+    (error) => {
+      console.error(`LR100-3D: Error loading ${fileName}:`, error);
+    }
+  );
+}
+
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World, Body, Cylinder, Material, ContactMaterial, Sphere, Vec3, DistanceConstraint, BODY_TYPES, Quaternion as CQuaternion, Box } from 'cannon-es';
 
@@ -263,7 +388,7 @@ function updateRopeGeometryFromWorker() {
 
 function createLogoFloor() {
   const textureLoader = new THREE.TextureLoader();
-  const logoTexture = textureLoader.load('./assets/taymer_logo.png');
+  const logoTexture = textureLoader.load(`${ASSET_PATH}taymer_logo.png`);
   logoTexture.transparent = false; // Ensure it's not transparent
   const topMaterial = new THREE.MeshPhongMaterial({ map: logoTexture, transparent: true });
   const brownMaterial = new THREE.MeshPhongMaterial({ color: 0xD2B48C });
@@ -347,23 +472,6 @@ function disposeModel(model) {
   scene.remove(model);
 }
 
-function loadCombo(fileName, onLoad) {
-  if (!fileName) return;
-  loader.load(
-    `./assets/${fileName}`,
-    (gltf) => {
-      const model = gltf.scene;
-      model.rotation.y = Math.PI;
-      model.position.x = 0.57;
-      model.position.y = 0.225;
-      scene.add(model);
-      if (onLoad) onLoad(model);
-    },
-    undefined,
-    (error) => console.error('Error loading combo file:', fileName, error)
-  );
-}
-
 let oldReelValue = '';
 let oldCounterValue = '';
 let oldCoilerValue = '';
@@ -415,7 +523,7 @@ function resetRopeCompletely() {
   // Reset accumulators
   accumulator = 0.0;
   physicsTime = 0.0;
-  segmentAccumulator = 0.0;
+  segmentAccumulator = 0.0; // Reset segment accumulator
   
   // Reset delay status
   coilerDelayActive = true;
@@ -673,7 +781,7 @@ function onDropdownChange() {
           physicsWorker.postMessage({ type: 'setRotation', data: { rotationSpeed: 0 } });
         }
         
-        // Explicitly reset all visual rotations to stop spinning
+        // Explicitly reset all visual rotations to stop ongoing rotation
         resetAllVisualRotations();
       }
     }
@@ -928,28 +1036,28 @@ function createRopeMesh(){
   };
   
   const textureLoader = new THREE.TextureLoader();
-  const colourMap = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
+  const colourMap = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_Color.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   });
   
-  const normalMap = textureLoader.load('./assets/Rope002_1K-JPG_NormalGL.jpg', function(texture) {
+  const normalMap = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_NormalGL.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
   
-  const roughnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Roughness.jpg', function(texture) {
+  const roughnessMap = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_Roughness.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
   
-  const metalnessMap = textureLoader.load('./assets/Rope002_1K-JPG_Metalness.jpg', function(texture) {
+  const metalnessMap = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_Metalness.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping; 
     texture.repeat.set(8, 1);
   });
   
-  const displacementMap = textureLoader.load('./assets/Rope002_1K-JPG_Displacement.jpg', function(texture) {
+  const displacementMap = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_Displacement.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(8, 1);
   });
@@ -1103,7 +1211,6 @@ function addRopeSegment(){
     });
     const nextBody = ropeBodies[21]; // Changed from 11 to 21
     if (!window.addedSegments) window.addedSegments = 0;
-    window.addedSegments++;
     if (!window.currentDirection) window.currentDirection = 1;
     if (!window.currentZ) window.currentZ = 0;
     if (window.addedSegments % 30 === 0) {
@@ -1369,7 +1476,7 @@ function loadSpoolFromMovingAssets() {
     spoolModel = null;
   }
   loader.load(
-    `./assets/284-SPOOL.gltf`,
+    `${ASSET_PATH}284-SPOOL.gltf`,
     (gltf) => {
       spoolModel = gltf.scene;
       spoolModel.position.set(-0.55, 0.16, 0.035);
@@ -1419,7 +1526,7 @@ function createFloorCoil() {
   );
   
   const textureLoader = new THREE.TextureLoader();
-  const ropeTexture = textureLoader.load('./assets/Rope002_1K-JPG_Color.jpg', function(texture) {
+  const ropeTexture = textureLoader.load(`${ASSET_PATH}Rope002_1K-JPG_Color.jpg`, function(texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(16, 1);
   });
