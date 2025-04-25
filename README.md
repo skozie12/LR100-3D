@@ -190,4 +190,4 @@ Copyright © 2025 Taymer. All rights reserved.
 For support, feature requests, or bug reports, please contact:
 - **Email**: support@taymer.com
 - **Website**: https://www.taymer.com
-- **GitHub**: https://github.com/taymer/lr100-3d
+- **GitHub**: https://github.com//lr100-3d
